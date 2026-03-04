@@ -9,13 +9,13 @@ certs/
 *.key
 
 # Go
-worker/tmp/
-worker/worker
+server/tmp/
 
 # Node / Next.js
 frontend/node_modules/
 frontend/.next/
 frontend/out/
+frontend/tsconfig.tsbuildinfo
 
 # Database runtime data
 data/

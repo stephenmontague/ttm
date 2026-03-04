@@ -3,11 +3,11 @@ export interface Company {
   CompanyName: string;
   Slug: string;
   StartedAt: string;
-  Status: "active" | "paused" | "meeting_booked";
+  Status: "active" | "meeting_booked" | "terminated" | "completed" | "canceled" | "failed";
   ElapsedDays: number;
   OutreachCount: number;
+  ContactCount: number;
   RestartCount: number;
-  CurrentContactRole: string | null;
   MeetingBookedAt: string | null;
   LastSnapshotAt: string | null;
   UpdatedAt: string;
@@ -23,17 +23,21 @@ export interface ActivityFeedItem {
   CreatedAt: string;
 }
 
-// Full workflow state returned by the admin query endpoint
+export interface Contact {
+  Name: string;
+  Role: string;
+  LinkedIn: string;
+  Active: boolean;
+  AddedAt: string;
+}
+
 export interface WorkflowState {
   CompanyName: string;
   Slug: string;
   StartedAt: string;
   Status: string;
-  CurrentContact: {
-    Name: string;
-    Role: string;
-    LinkedIn: string;
-  } | null;
+  CurrentContact: Contact | null;
+  Contacts: Contact[];
   OutreachAttempts: {
     Timestamp: string;
     Channel: string;

@@ -9,6 +9,64 @@ services:
       - "5434:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ttm -d ttm_tracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    image: golang:1.25
+    working_dir: /app/server
+    command: go run ./cmd/api
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./server:/app/server
+      - ~/.temporal:/certs:ro
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://ttm:ttm@postgres:5432/ttm_tracker
+      TEMPORAL_TLS_CERT: /certs/client.pem
+      TEMPORAL_TLS_KEY: /certs/client.key
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    image: golang:1.25
+    working_dir: /app/server
+    command: go run ./cmd/worker
+    volumes:
+      - ./server:/app/server
+      - ~/.temporal:/certs:ro
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://ttm:ttm@postgres:5432/ttm_tracker
+      TEMPORAL_TLS_CERT: /certs/client.pem
+      TEMPORAL_TLS_KEY: /certs/client.key
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    image: node:22-slim
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- -p 4000"
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
+    environment:
+      API_URL: http://api:9090/api
 
 volumes:
   pgdata:
+  go-mod-cache:
+  go-build-cache:
+  frontend-node-modules:

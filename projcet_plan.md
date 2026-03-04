@@ -74,18 +74,18 @@ The app serves dual purposes:
 │  │   1. Wait for signal OR timer (daily tick)       │     │
 │  │   2. On timer tick:                              │     │
 │  │      - Update elapsed time                       │     │
-│  │      - Snapshot state to SQLite (activity)       │     │
+│  │      - Snapshot state to PostgreSQL (activity)       │     │
 │  │   3. On signal:                                  │     │
 │  │      - Process signal                            │     │
 │  │      - If RequestAgentHelp -> run agent activity  │     │
-│  │      - Snapshot state to SQLite                  │     │
+│  │      - Snapshot state to PostgreSQL                  │     │
 │  │   4. If MeetingBooked -> complete workflow        │     │
 │  │   5. Periodically continue-as-new to manage      │     │
 │  │      event history size                          │     │
 │  └─────────────────────────────────────────────────┘     │
 │                                                          │
 │  Activities:                                             │
-│   - SnapshotStateToCache(state) -> writes to SQLite      │
+│   - SnapshotStateToCache(state) -> writes to PostgreSQL   │
 │   - RunAgent(agentRequest) -> calls Claude API           │
 │   - LogRestartEvent() -> increments restart counter      │
 │                                                          │
@@ -417,7 +417,7 @@ Example agent loop:
 ### Public Endpoints (no auth)
 
 ```
-GET  /api/companies              - list all tracked companies (cached state from SQLite)
+GET  /api/companies              - list all tracked companies (cached state from PostgreSQL)
 GET  /api/companies/:slug        - single company public state
 GET  /api/companies/:slug/feed   - sanitized activity feed for a company
 GET  /api/stats                  - aggregate stats (total workflows, avg TTM, etc.)
@@ -446,37 +446,37 @@ CREATE TABLE company_workflows (
     id              TEXT PRIMARY KEY,  -- workflow ID (slug)
     company_name    TEXT NOT NULL,
     slug            TEXT UNIQUE NOT NULL,
-    started_at      DATETIME NOT NULL,
+    started_at      TIMESTAMPTZ NOT NULL,
     status          TEXT NOT NULL DEFAULT 'active',  -- active, paused, meeting_booked
     elapsed_days    INTEGER DEFAULT 0,
     outreach_count  INTEGER DEFAULT 0,
     restart_count   INTEGER DEFAULT 0,
     current_contact_role TEXT,  -- role only, no name (for public display)
-    meeting_booked_at    DATETIME,
-    last_snapshot_at     DATETIME,
-    updated_at           DATETIME DEFAULT CURRENT_TIMESTAMP
+    meeting_booked_at    TIMESTAMPTZ,
+    last_snapshot_at     TIMESTAMPTZ,
+    updated_at           TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Sanitized activity feed for public display
 CREATE TABLE activity_feed (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    id          SERIAL PRIMARY KEY,
     workflow_id TEXT NOT NULL REFERENCES company_workflows(id),
-    timestamp   DATETIME NOT NULL,
+    timestamp   TIMESTAMPTZ NOT NULL,
     event_type  TEXT NOT NULL,  -- outreach, contact_change, agent_action, restart, meeting_booked
     description TEXT NOT NULL,  -- sanitized, human-readable description
     channel     TEXT,           -- email, linkedin, slack, phone (for outreach events)
-    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Full agent suggestions (admin only, not exposed publicly)
 CREATE TABLE agent_suggestions (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    id          SERIAL PRIMARY KEY,
     workflow_id TEXT NOT NULL REFERENCES company_workflows(id),
     task_type   TEXT NOT NULL,
     request     TEXT,
     response    TEXT,
     draft_message TEXT,
-    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
@@ -484,70 +484,98 @@ CREATE TABLE agent_suggestions (
 
 ## Project Structure
 
-> **Note:** The actual project structure uses Go standard layout (`cmd/` + `internal/`) rather than the flat `worker/` layout originally planned. The API server and worker are separate binaries.
+> **Note:** The Go backend lives in `server/` using standard Go layout (`cmd/` + `internal/`). The API server and worker are separate binaries.
 
 ```
 ttm-tracker/
+├── .env                            # Environment variables (gitignored)
 ├── .env.example                    # Template for environment variables
 ├── .gitignore
 ├── docker-compose.yml              # Local dev: Postgres (worker + API run via go run)
-├── go.mod                          # Go module at project root
-├── go.sum
 │
-├── cmd/                            # Application entry points
-│   ├── api/
-│   │   └── main.go                 # REST API server (Temporal client + PostgreSQL)
-│   └── worker/
-│       └── main.go                 # Temporal worker (executes workflows + activities)
-│
-├── internal/                       # Private Go packages
-│   ├── activities/
-│   │   └── snapshot.go             # SnapshotStateToCache activity (writes to PostgreSQL)
-│   ├── api/
-│   │   └── handler.go             # HTTP handlers (public + admin endpoints)
-│   ├── config/
-│   │   └── config.go              # Constants, env helpers, signal/query names
-│   ├── database/
-│   │   ├── database.go            # PostgreSQL connection pool (pgx)
-│   │   └── migrations.go          # Schema creation on startup
-│   ├── models/
-│   │   └── outreach.go            # Shared types (WorkflowState, signals, etc.)
-│   ├── repository/
-│   │   └── company.go             # Database query functions
-│   ├── temporal/
-│   │   └── client.go              # Temporal Cloud mTLS client
-│   └── workflow/
-│       └── outreach/
-│           └── workflow.go         # CompanyOutreachWorkflow definition
+├── server/                         # Go backend
+│   ├── go.mod                      # Go module (github.com/.../ttm-tracker/server)
+│   ├── go.sum
+│   ├── cmd/                        # Application entry points
+│   │   ├── api/
+│   │   │   └── main.go             # REST API server (Temporal client + PostgreSQL)
+│   │   └── worker/
+│   │       └── main.go             # Temporal worker (executes workflows + activities)
+│   └── internal/                   # Private Go packages
+│       ├── activities/
+│       │   └── snapshot.go         # SnapshotStateToCache activity (writes to PostgreSQL)
+│       ├── api/
+│       │   └── handler.go          # HTTP handlers (public + admin endpoints)
+│       ├── config/
+│       │   └── config.go           # Constants, env helpers, signal/query names
+│       ├── database/
+│       │   ├── database.go         # PostgreSQL connection pool (pgx)
+│       │   └── migrations.go       # Schema creation on startup
+│       ├── models/
+│       │   └── outreach.go         # Shared types (WorkflowState, signals, etc.)
+│       ├── repository/
+│       │   └── company.go          # Database query functions
+│       ├── temporal/
+│       │   └── client.go           # Temporal Cloud mTLS client
+│       └── workflow/
+│           └── outreach/
+│               └── workflow.go     # CompanyOutreachWorkflow definition
 │
 ├── frontend/                       # Next.js 16 application
 │   ├── package.json
 │   ├── next.config.ts
 │   ├── components.json             # shadcn/ui config
-│   ├── .env.local                  # NEXT_PUBLIC_API_URL
+│   ├── .env.local                  # API_URL (server-side only, no NEXT_PUBLIC_)
 │   ├── app/
-│   │   ├── layout.tsx              # Root layout
-│   │   ├── page.tsx                # Public home / dashboard
+│   │   ├── globals.css             # Tailwind + shadcn theme (light + dark)
+│   │   ├── layout.tsx              # Root layout (ThemeProvider, Geist fonts, Toaster)
+│   │   ├── page.tsx                # Public home / dashboard (SSR)
+│   │   ├── dashboard-content.tsx   # Client wrapper for polling
 │   │   ├── company/
 │   │   │   └── [slug]/
-│   │   │       └── page.tsx        # Public company detail
-│   │   └── admin/
-│   │       ├── page.tsx            # Admin dashboard
-│   │       └── company/
-│   │           └── [slug]/
-│   │               └── page.tsx    # Admin company detail + signal panel
+│   │   │       └── page.tsx        # Public company detail (SSR)
+│   │   ├── admin/
+│   │   │   ├── layout.tsx          # Admin layout wrapper
+│   │   │   ├── page.tsx            # Admin dashboard
+│   │   │   └── company/
+│   │   │       └── [slug]/
+│   │   │           └── page.tsx    # Admin company detail + signal panel
+│   │   └── api/                    # Next.js API routes (proxy to Go backend)
+│   │       ├── companies/
+│   │       │   ├── route.ts        # GET  /api/companies
+│   │       │   └── [slug]/
+│   │       │       ├── route.ts    # GET  /api/companies/[slug]
+│   │       │       └── feed/
+│   │       │           └── route.ts # GET /api/companies/[slug]/feed
+│   │       └── admin/
+│   │           └── companies/
+│   │               ├── route.ts    # POST /api/admin/companies
+│   │               └── [slug]/
+│   │                   ├── route.ts # GET /api/admin/companies/[slug]
+│   │                   └── signal/
+│   │                       └── [action]/
+│   │                           └── route.ts # POST signal dispatcher
 │   ├── components/
-│   │   ├── ui/                     # shadcn/ui components (button, card, input, etc.)
+│   │   ├── ui/                     # shadcn/ui primitives (badge, button, card, etc.)
+│   │   ├── theme-provider.tsx      # next-themes wrapper
+│   │   ├── theme-toggle.tsx        # Dark/light toggle button
+│   │   ├── site-header.tsx         # Sticky header with branding + nav
+│   │   ├── site-footer.tsx         # Footer ("Powered by Temporal")
 │   │   ├── workflow-card.tsx       # Public workflow card component
-│   │   └── elapsed-timer.tsx       # Live-updating elapsed time display
+│   │   ├── elapsed-timer.tsx       # Live-updating elapsed time display
+│   │   ├── status-badge.tsx        # Reusable status indicator
+│   │   ├── activity-feed.tsx       # Activity feed timeline
+│   │   ├── signal-panel.tsx        # Admin signal forms (outreach, contact, meeting, pause)
+│   │   ├── create-workflow-form.tsx # Admin new workflow form
+│   │   └── company-stats.tsx       # Stats display row
+│   ├── hooks/
+│   │   ├── use-polling.ts          # Generic data polling hook
+│   │   └── use-signal.ts           # Signal submission + toast hook
 │   └── lib/
-│       ├── api.ts                  # API client functions
 │       ├── types.ts                # TypeScript type definitions
-│       └── utils.ts                # Utilities (shadcn/ui cn helper)
-│
-│   # --- Not yet created ---
-│   ├── agent/                      # (Phase 3) Claude API client with tool-use loop
-│   └── Makefile                    # (Phase 4) Build, run, deploy commands
+│       ├── utils.ts                # Utilities (shadcn/ui cn helper)
+│       ├── backend.ts              # Server-side Go backend proxy
+│       └── constants.ts            # Status config, channel options
 ```
 
 ---
@@ -575,11 +603,14 @@ BRAVE_SEARCH_API_KEY=...          # Brave Search API (free tier: 2,000 queries/m
 # PostgreSQL (Railway provides DATABASE_URL automatically)
 DATABASE_URL=postgresql://user:password@host:5432/ttm_tracker
 
-# Admin Auth
-ADMIN_PASSWORD=your-secure-password
+# Admin Auth (Phase 3 — seed user + session-based login)
+ADMIN_SEED_EMAIL=you@example.com
+ADMIN_SEED_PASSWORD=your-secure-password
+SESSION_COOKIE_NAME=ttm_session
+SESSION_MAX_AGE=604800  # 7 days in seconds
 
-# Frontend
-NEXT_PUBLIC_API_URL=http://localhost:8080/api
+# Frontend (server-side only — used by Next.js API routes to proxy to Go backend)
+API_URL=http://localhost:9090/api
 
 # App
 PORT=8080
@@ -623,28 +654,88 @@ ENVIRONMENT=development
 
 ---
 
-### Phase 2: Full HITL Signals + Admin Dashboard (PARTIALLY COMPLETE)
+### Phase 2: Full HITL Signals + Admin Dashboard ✅ COMPLETE
 
 **Goal:** Complete signal handling and build out the admin experience.
 
-**Status:** Several tasks were completed early as part of Phase 1. Remaining work is activity feed writes, restart counter, and auth middleware.
+**Status:** Complete. All tasks done. Auth middleware moved to dedicated Phase 3.
+
+**Frontend rebuilt:** The Next.js frontend was rebuilt from scratch with a new architecture. API routes (`app/api/*/route.ts`) now contain full business logic (validation, Go backend proxy, error handling). The browser-side `lib/api.ts` client was removed — pages call Next.js API routes directly via `fetch`. Dark/light theme toggle added via `next-themes`. No `NEXT_PUBLIC_` env vars — the Go backend URL is server-side only.
 
 **Tasks:**
 
 1. ~~**Remaining signals** - implement `UpdateContact`, `Pause`, `Resume` in workflow~~ ✅ (done in Phase 1)
 2. ~~**Admin signal panel** - full UI for sending all signal types~~ ✅ (done in Phase 1)
-3. **Activity feed** - write sanitized events to `activity_feed` table on each signal (table exists, snapshot activity needs to write events)
-4. ~~**Public activity timeline** - show curated feed on company detail page~~ ✅ (UI built, needs activity feed data)
+3. ~~**Activity feed** - write sanitized events to `activity_feed` table on each signal~~ ✅ (`PersistWorkflowState` activity writes sanitized events to `activity_feed` table via `sanitize.go`)
+4. ~~**Public activity timeline** - show curated feed on company detail page~~ ✅ (UI built and connected to activity feed data)
 5. ~~**Admin company detail** - full state view with outreach history, contacts~~ ✅ (done in Phase 1)
-6. **Restart counter** - track and display worker restart count
+6. ~~**Restart counter** - track and display worker restart count~~ ✅ (`restart_count` persisted to DB, displayed on workflow cards and company stats)
 7. ~~**Wall of Wins** - completed workflows section on homepage~~ ✅ (done in Phase 1)
-8. **Auth middleware** - simple password-based auth for admin routes
+8. ~~**Auth middleware** - simple password-based auth for admin routes~~ ⏭️ (moved to dedicated Phase 3)
 
-**Deliverable:** Full HITL demo - you can manage the entire outreach lifecycle through the admin panel, and the public page shows a rich, sanitized view.
+**Deliverable:** ✅ Full HITL demo - you can manage the entire outreach lifecycle through the admin panel, and the public page shows a rich, sanitized view.
 
 ---
 
-### Phase 3: AI Agent Integration
+### Phase 3: Authentication & Admin Login
+
+**Goal:** Lock down all admin functionality behind a real login page. You are the only user — the database is seeded with your account. Everyone else sees the public pages only.
+
+**Design decisions:**
+- **Single-user model** — the `admin_users` table is seeded with one row (you). There is no registration flow.
+- **Hidden login page** — `/admin/login` exists but is not linked from any public navigation. You navigate to it directly.
+- **Session-based auth** — login sets an HTTP-only, secure cookie containing a session token. No JWTs, no client-side token storage.
+- **Server-side enforcement** — the Next.js admin layout (`app/admin/layout.tsx`) checks the session cookie server-side and redirects unauthenticated requests to `/admin/login`. The Go backend admin endpoints also validate the session.
+- **Password hashing** — bcrypt-hashed password stored in the database. Plaintext password never persisted.
+
+**Database additions:**
+
+```sql
+-- Single admin user (seeded, no registration)
+CREATE TABLE admin_users (
+    id            SERIAL PRIMARY KEY,
+    email         TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,       -- bcrypt
+    created_at    TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Active sessions
+CREATE TABLE admin_sessions (
+    id         TEXT PRIMARY KEY,        -- secure random token
+    user_id    INTEGER NOT NULL REFERENCES admin_users(id),
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**Tasks:**
+
+1. **Database schema + seed** — add `admin_users` and `admin_sessions` tables to the migration. Seed script inserts your account (email + bcrypt-hashed password from `ADMIN_SEED_EMAIL` / `ADMIN_SEED_PASSWORD` env vars). Runs on startup, skips if user already exists.
+2. **Go auth endpoints** — `POST /api/auth/login` (validates credentials, creates session, sets cookie) and `POST /api/auth/logout` (deletes session, clears cookie). `GET /api/auth/me` returns the current user or 401.
+3. **Go admin middleware** — middleware on all `/api/admin/*` routes that reads the session cookie, looks up the session in the database, and rejects expired or missing sessions with 401.
+4. **Next.js login page** — `/admin/login` with email + password form. On success, redirects to `/admin`. Clean, minimal UI using shadcn/ui components. Not linked from public nav.
+5. **Next.js admin layout guard** — `app/admin/layout.tsx` calls `GET /api/auth/me` server-side. If unauthenticated, redirects to `/admin/login`. All admin pages are protected by this layout.
+6. **Next.js API route proxying** — admin API routes (`app/api/admin/*`) forward the session cookie to the Go backend so the Go middleware can validate it.
+7. **Logout button** — add a logout button to the admin header/nav. Calls `POST /api/auth/logout`, clears the cookie, redirects to `/`.
+8. **Session expiry + cleanup** — sessions expire after 7 days. The Go backend deletes expired sessions on login and periodically (or lazily on each auth check).
+
+**Environment variables added:**
+
+```bash
+# Admin seed (used once on first startup to create your account)
+ADMIN_SEED_EMAIL=you@example.com
+ADMIN_SEED_PASSWORD=your-secure-password
+
+# Session cookie
+SESSION_COOKIE_NAME=ttm_session
+SESSION_MAX_AGE=604800  # 7 days in seconds
+```
+
+**Deliverable:** The admin dashboard is fully locked down. You log in at `/admin/login`, get a session cookie, and access all admin features. Anyone without the cookie sees only public pages. No registration, no invite flow — just you.
+
+---
+
+### Phase 4: AI Agent Integration
 
 **Goal:** Add a real agentic activity that uses Claude's tool-use to autonomously research and assist with outreach.
 
@@ -665,7 +756,7 @@ ENVIRONMENT=development
 
 ---
 
-### Phase 4: Polish + Deploy
+### Phase 5: Polish + Deploy
 
 **Goal:** Production-ready deployment with polish.
 
@@ -702,9 +793,9 @@ ENVIRONMENT=development
 ## Security Considerations
 
 - **No PII on public pages** - contact names, emails, LinkedIn URLs are admin-only
-- **Admin auth** - all signal-sending and full-state endpoints require authentication
+- **Admin auth** - session-based login with bcrypt-hashed password. Single seeded user, no registration. HTTP-only secure cookie. All admin endpoints validated server-side
 - **Rate limiting** - public API endpoints rate-limited to prevent abuse
-- **No public query exposure** - Temporal query API is internal only; public UI reads from SQLite cache
+- **No public query exposure** - Temporal query API is internal only; public UI reads from PostgreSQL cache
 - **Environment variables** - all secrets (Temporal certs, API keys, admin password) via env vars, never committed
 - **CORS** - configured to allow only the frontend origin
 
