@@ -1,6 +1,9 @@
 package config
 
-import "os"
+import (
+	"os"
+	"strconv"
+)
 
 const (
 	TaskQueue    = "ttm-tracker"
@@ -38,4 +41,34 @@ func GetAPIPort() string {
 
 func GetDatabaseURL() string {
 	return os.Getenv("DATABASE_URL")
+}
+
+// Session auth constants
+const (
+	DefaultSessionCookieName = "ttm_session"
+	DefaultSessionMaxAge     = 604800 // 7 days in seconds
+)
+
+func GetAdminSeedEmail() string {
+	return os.Getenv("ADMIN_SEED_EMAIL")
+}
+
+func GetAdminSeedPassword() string {
+	return os.Getenv("ADMIN_SEED_PASSWORD")
+}
+
+func GetSessionCookieName() string {
+	if n := os.Getenv("SESSION_COOKIE_NAME"); n != "" {
+		return n
+	}
+	return DefaultSessionCookieName
+}
+
+func GetSessionMaxAge() int {
+	if s := os.Getenv("SESSION_MAX_AGE"); s != "" {
+		if v, err := strconv.Atoi(s); err == nil && v > 0 {
+			return v
+		}
+	}
+	return DefaultSessionMaxAge
 }

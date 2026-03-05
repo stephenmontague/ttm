@@ -1,8 +1,18 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { backendGet, backendPost } from "@/lib/backend";
 
+const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || "ttm_session";
+
+async function getSessionCookie(): Promise<string> {
+  const cookieStore = await cookies();
+  const session = cookieStore.get(COOKIE_NAME);
+  return session ? `${COOKIE_NAME}=${session.value}` : "";
+}
+
 export async function GET() {
-  const { data, status, ok } = await backendGet("/admin/companies");
+  const cookieHeader = await getSessionCookie();
+  const { data, status, ok } = await backendGet("/admin/companies", cookieHeader);
 
   if (!ok) {
     return NextResponse.json(
@@ -29,9 +39,11 @@ export async function POST(request: Request) {
     );
   }
 
+  const cookieHeader = await getSessionCookie();
   const { data, status, ok } = await backendPost(
     "/admin/companies",
-    JSON.stringify({ companyName: body.companyName.trim() })
+    JSON.stringify({ companyName: body.companyName.trim() }),
+    cookieHeader
   );
 
   if (!ok) {

@@ -68,4 +68,21 @@ var migrations = []string{
 
 	// Multi-contact tracking
 	`ALTER TABLE company_workflows ADD COLUMN IF NOT EXISTS contact_count INTEGER DEFAULT 0`,
+
+	// Admin authentication
+	`CREATE TABLE IF NOT EXISTS admin_users (
+		id            SERIAL PRIMARY KEY,
+		email         TEXT UNIQUE NOT NULL,
+		password_hash TEXT NOT NULL,
+		created_at    TIMESTAMPTZ DEFAULT NOW()
+	)`,
+
+	`CREATE TABLE IF NOT EXISTS admin_sessions (
+		token      TEXT PRIMARY KEY,
+		user_id    INTEGER NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+		created_at TIMESTAMPTZ DEFAULT NOW(),
+		expires_at TIMESTAMPTZ NOT NULL
+	)`,
+
+	`CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires_at ON admin_sessions(expires_at)`,
 }

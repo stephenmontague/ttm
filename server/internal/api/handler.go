@@ -54,12 +54,14 @@ func obfuscateCompany(c repository.CompanyRow) publicCompany {
 type Handler struct {
 	temporalClient client.Client
 	companyRepo    *repository.CompanyRepository
+	authRepo       *repository.AuthRepository
 }
 
-func NewHandler(temporalClient client.Client, companyRepo *repository.CompanyRepository) *Handler {
+func NewHandler(temporalClient client.Client, companyRepo *repository.CompanyRepository, authRepo *repository.AuthRepository) *Handler {
 	return &Handler{
 		temporalClient: temporalClient,
 		companyRepo:    companyRepo,
+		authRepo:       authRepo,
 	}
 }
 

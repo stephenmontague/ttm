@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/stephenmontague/ttm-tracker/server/internal/api"
 	"github.com/stephenmontague/ttm-tracker/server/internal/config"
@@ -50,9 +51,28 @@ func main() {
 	defer temporalClient.Close()
 	log.Println("Connected to Temporal")
 
-	// Initialize handler
+	// Initialize repositories
 	companyRepo := repository.NewCompanyRepository(dbPool)
-	handler := api.NewHandler(temporalClient, companyRepo)
+	authRepo := repository.NewAuthRepository(dbPool)
+
+	// Seed admin user from env vars
+	seedEmail := config.GetAdminSeedEmail()
+	seedPassword := config.GetAdminSeedPassword()
+	if seedEmail != "" && seedPassword != "" {
+		hash, err := bcrypt.GenerateFromPassword([]byte(seedPassword), bcrypt.DefaultCost)
+		if err != nil {
+			log.Fatalf("Failed to hash admin password: %v", err)
+		}
+		if err := authRepo.UpsertAdminUser(ctx, seedEmail, string(hash)); err != nil {
+			log.Fatalf("Failed to seed admin user: %v", err)
+		}
+		log.Printf("Admin user seeded: %s", seedEmail)
+	} else {
+		log.Println("ADMIN_SEED_EMAIL or ADMIN_SEED_PASSWORD not set — skipping admin seed")
+	}
+
+	// Initialize handler
+	handler := api.NewHandler(temporalClient, companyRepo, authRepo)
 
 	// Setup router
 	r := chi.NewRouter()
@@ -80,8 +100,14 @@ func main() {
 		r.Get("/companies/{slug}", handler.GetCompany)
 		r.Get("/companies/{slug}/feed", handler.GetCompanyFeed)
 
-		// Admin endpoints
+		// Auth endpoints (public — no session required)
+		r.Post("/auth/login", handler.PostLogin)
+		r.Post("/auth/logout", handler.PostLogout)
+
+		// Admin endpoints (protected by session middleware)
 		r.Route("/admin", func(r chi.Router) {
+			r.Use(handler.RequireSession)
+			r.Get("/auth/status", handler.GetAuthStatus)
 			r.Get("/companies", handler.ListAdminCompanies)
 			r.Post("/companies", handler.CreateCompany)
 			r.Get("/companies/{slug}", handler.GetAdminCompany)

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { backendPost } from "@/lib/backend";
 import { VALID_SIGNAL_ACTIONS, type SignalAction } from "@/lib/constants";
+
+const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || "ttm_session";
 
 function validateBody(action: SignalAction, body: Record<string, unknown>): string | null {
   switch (action) {
@@ -61,9 +64,14 @@ export async function POST(
   // Map frontend action names to backend paths.
   const backendAction = action === "contact_remove" ? "contact/remove" : action;
 
+  const cookieStore = await cookies();
+  const session = cookieStore.get(COOKIE_NAME);
+  const cookieHeader = session ? `${COOKIE_NAME}=${session.value}` : "";
+
   const { data, status, ok } = await backendPost(
     `/admin/companies/${slug}/signal/${backendAction}`,
-    JSON.stringify(body)
+    JSON.stringify(body),
+    cookieHeader
   );
 
   if (!ok) {

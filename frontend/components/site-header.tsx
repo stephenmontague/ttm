@@ -1,8 +1,15 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { LogoutButton } from "@/components/logout-button";
 import { Activity } from "lucide-react";
 
-export function SiteHeader() {
+const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || "ttm_session";
+
+export async function SiteHeader() {
+  const cookieStore = await cookies();
+  const isLoggedIn = !!cookieStore.get(COOKIE_NAME)?.value;
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-lg">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
@@ -27,14 +34,17 @@ export function SiteHeader() {
           >
             Dashboard
           </Link>
-          <Link
-            href="/admin"
-            className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Admin
-          </Link>
+          {isLoggedIn && (
+            <Link
+              href="/admin"
+              className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Admin
+            </Link>
+          )}
           <div className="ml-2 h-4 w-px bg-border" />
           <ThemeToggle />
+          {isLoggedIn && <LogoutButton />}
         </nav>
       </div>
     </header>

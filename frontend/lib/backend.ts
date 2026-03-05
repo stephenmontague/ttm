@@ -6,9 +6,12 @@ interface BackendResponse<T = unknown> {
   ok: boolean;
 }
 
-export async function backendGet<T = unknown>(path: string): Promise<BackendResponse<T>> {
+export async function backendGet<T = unknown>(path: string, cookieHeader?: string): Promise<BackendResponse<T>> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (cookieHeader) headers["Cookie"] = cookieHeader;
+
   const res = await fetch(`${BACKEND_URL}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers,
     cache: "no-store",
   });
 
@@ -22,10 +25,13 @@ export async function backendGet<T = unknown>(path: string): Promise<BackendResp
   return { data, status: res.status, ok: res.ok };
 }
 
-export async function backendPost<T = unknown>(path: string, body: string): Promise<BackendResponse<T>> {
+export async function backendPost<T = unknown>(path: string, body: string, cookieHeader?: string): Promise<BackendResponse<T>> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (cookieHeader) headers["Cookie"] = cookieHeader;
+
   const res = await fetch(`${BACKEND_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body,
   });
 
