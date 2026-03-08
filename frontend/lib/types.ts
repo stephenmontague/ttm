@@ -47,10 +47,12 @@ export interface WorkflowState {
   AgentSuggestions: {
     Timestamp: string;
     TaskType: string;
+    ContactName: string;
     Request: string;
     Response: string;
     DraftMessage: string;
   }[];
+  AgentTaskInProgress: boolean;
   WorkerRestartCount: number;
   LastSnapshotAt: string;
   MeetingBookedAt: string | null;

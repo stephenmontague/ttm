@@ -26,8 +26,9 @@ type RemoveContactSignal struct {
 }
 
 type RequestAgentHelpSignal struct {
-	TaskType string // "draft_message" | "suggest_contact" | "next_action"
-	Context  string
+	TaskType    string // "draft_message" | "suggest_contact" | "next_action"
+	Context     string
+	ContactName string // optional — target contact for this request
 }
 
 type MeetingBookedSignal struct {

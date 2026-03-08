@@ -111,6 +111,7 @@ func main() {
 			r.Get("/companies", handler.ListAdminCompanies)
 			r.Post("/companies", handler.CreateCompany)
 			r.Get("/companies/{slug}", handler.GetAdminCompany)
+			r.Post("/companies/{slug}/reconcile", handler.ReconcileCompanyStatus)
 			r.Post("/companies/{slug}/signal/outreach", handler.SignalOutreach)
 			r.Post("/companies/{slug}/signal/contact", handler.SignalAddContact)
 			r.Post("/companies/{slug}/signal/contact/remove", handler.SignalRemoveContact)

@@ -1,10 +1,14 @@
 package outreach
 
 import (
+	"fmt"
 	"time"
 
+	"go.temporal.io/sdk/log"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
+	"github.com/stephenmontague/ttm-tracker/server/internal/agent"
 	"github.com/stephenmontague/ttm-tracker/server/internal/config"
 	"github.com/stephenmontague/ttm-tracker/server/internal/models"
 )
@@ -43,7 +47,7 @@ func Workflow(ctx workflow.Context, params models.WorkflowParams) (*models.Workf
 	})
 
 	// Initial persist so the company appears in the dashboard immediately.
-	_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", state, &models.ActivityEvent{EventType: "workflow_started"}).Get(ctx, nil)
+	_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", models.PersistWorkflowStateRequest{State: state, Event: &models.ActivityEvent{EventType: "workflow_started"}}).Get(ctx, nil)
 	state.LastSnapshotAt = workflow.Now(ctx)
 
 	// Create one timer that we cancel and recreate only when it fires.
@@ -75,10 +79,10 @@ func Workflow(ctx workflow.Context, params models.WorkflowParams) (*models.Workf
 			})
 
 			logger.Info("Outreach logged", "channel", signal.Channel, "contact", contactName, "total_attempts", len(state.OutreachAttempts))
-			_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", state, &models.ActivityEvent{
+			_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", models.PersistWorkflowStateRequest{State: state, Event: &models.ActivityEvent{
 				EventType: "outreach",
 				Channel:   signal.Channel,
-			}).Get(ctx, nil)
+				}}).Get(ctx, nil)
 			state.LastSnapshotAt = workflow.Now(ctx)
 		})
 
@@ -107,10 +111,10 @@ func Workflow(ctx workflow.Context, params models.WorkflowParams) (*models.Workf
 			}
 
 			logger.Info("Contact added", "name", signal.Name, "role", signal.Role, "total_contacts", len(state.Contacts))
-			_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", state, &models.ActivityEvent{
+			_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", models.PersistWorkflowStateRequest{State: state, Event: &models.ActivityEvent{
 				EventType:   "contact_change",
 				Description: signal.Role,
-			}).Get(ctx, nil)
+				}}).Get(ctx, nil)
 			state.LastSnapshotAt = workflow.Now(ctx)
 		})
 
@@ -126,10 +130,10 @@ func Workflow(ctx workflow.Context, params models.WorkflowParams) (*models.Workf
 			}
 
 			logger.Info("Contact deactivated", "name", signal.Name)
-			_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", state, &models.ActivityEvent{
+			_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", models.PersistWorkflowStateRequest{State: state, Event: &models.ActivityEvent{
 				EventType:   "contact_change",
 				Description: "contact removed",
-			}).Get(ctx, nil)
+				}}).Get(ctx, nil)
 			state.LastSnapshotAt = workflow.Now(ctx)
 		})
 
@@ -169,10 +173,10 @@ func Workflow(ctx workflow.Context, params models.WorkflowParams) (*models.Workf
 			}
 
 			logger.Info("Contact updated (legacy signal)", "name", signal.Name, "role", signal.Role)
-			_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", state, &models.ActivityEvent{
+			_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", models.PersistWorkflowStateRequest{State: state, Event: &models.ActivityEvent{
 				EventType:   "contact_change",
 				Description: signal.Role,
-			}).Get(ctx, nil)
+				}}).Get(ctx, nil)
 			state.LastSnapshotAt = workflow.Now(ctx)
 		})
 
@@ -180,12 +184,16 @@ func Workflow(ctx workflow.Context, params models.WorkflowParams) (*models.Workf
 			var signal models.RequestAgentHelpSignal
 			ch.Receive(ctx, &signal)
 
-			// TODO (Phase 3): Execute RunAgent activity here
-			logger.Info("Agent help requested", "taskType", signal.TaskType)
-			_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", state, &models.ActivityEvent{
+			logger.Info("Agent help requested", "taskType", signal.TaskType, "contact", signal.ContactName)
+			state.AgentTaskInProgress = true
+			suggestion := runAgentLoop(ctx, logger, state, signal)
+			state.AgentTaskInProgress = false
+			state.AgentSuggestions = append(state.AgentSuggestions, suggestion)
+
+			_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", models.PersistWorkflowStateRequest{State: state, Event: &models.ActivityEvent{
 				EventType:   "agent_action",
 				Description: signal.TaskType,
-			}).Get(ctx, nil)
+				}}).Get(ctx, nil)
 			state.LastSnapshotAt = workflow.Now(ctx)
 		})
 
@@ -198,7 +206,7 @@ func Workflow(ctx workflow.Context, params models.WorkflowParams) (*models.Workf
 			state.MeetingNotes = signal.Notes
 
 			logger.Info("Meeting booked!", "date", signal.Date)
-			_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", state, &models.ActivityEvent{EventType: "meeting_booked"}).Get(ctx, nil)
+			_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", models.PersistWorkflowStateRequest{State: state, Event: &models.ActivityEvent{EventType: "meeting_booked"}}).Get(ctx, nil)
 			state.LastSnapshotAt = workflow.Now(ctx)
 		})
 
@@ -206,7 +214,7 @@ func Workflow(ctx workflow.Context, params models.WorkflowParams) (*models.Workf
 			_ = f.Get(ctx, nil)
 			timerFired = true
 			logger.Info("Daily timer tick")
-			_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", state, nil).Get(ctx, nil)
+			_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", models.PersistWorkflowStateRequest{State: state}).Get(ctx, nil)
 			state.LastSnapshotAt = workflow.Now(ctx)
 		})
 
@@ -235,8 +243,169 @@ func Workflow(ctx workflow.Context, params models.WorkflowParams) (*models.Workf
 
 	timerCancel()
 
-	_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", state, nil).Get(ctx, nil)
+	_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", models.PersistWorkflowStateRequest{State: state}).Get(ctx, nil)
 	state.LastSnapshotAt = workflow.Now(ctx)
 	logger.Info("Workflow completed", "company", state.CompanyName)
 	return state, nil
+}
+
+// runAgentLoop orchestrates the agentic loop as workflow logic.
+// Each Claude API call and tool execution is a separate Temporal activity.
+func runAgentLoop(ctx workflow.Context, logger log.Logger, state *models.WorkflowState, signal models.RequestAgentHelpSignal) models.AgentSuggestion {
+	// Activity options for Claude API calls (longer timeout).
+	claudeActCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 90 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts: 2,
+		},
+	})
+
+	// Activity options for tool execution (shorter timeout).
+	toolActCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts: 2,
+		},
+	})
+
+	// Activity options for saving the suggestion.
+	saveActCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 10 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts: 3,
+		},
+	})
+
+	// Check if Lusha API key is configured (activity because workflows can't read env vars).
+	var lushaEnabled bool
+	_ = workflow.ExecuteActivity(saveActCtx, "CheckLushaEnabled").Get(ctx, &lushaEnabled)
+	tools := agent.ToolDefinitions(lushaEnabled)
+
+	// Find the selected contact's role for prompt context.
+	var contactRole string
+	if signal.ContactName != "" {
+		for _, c := range state.Contacts {
+			if c.Name == signal.ContactName {
+				contactRole = c.Role
+				break
+			}
+		}
+	}
+
+	systemPrompt := agent.SystemPrompt(signal.TaskType, state, signal.ContactName, contactRole)
+	messages := agent.BuildInitialMessages(signal.TaskType, signal.Context, signal.ContactName)
+
+	const maxIterations = 10
+
+	for i := range maxIterations {
+		// Call Claude activity.
+		var claudeResp agent.CallClaudeResponse
+		err := workflow.ExecuteActivity(claudeActCtx, "CallClaude", agent.CallClaudeRequest{
+			System:   systemPrompt,
+			Messages: messages,
+			Tools:    tools,
+		}).Get(ctx, &claudeResp)
+		if err != nil {
+			logger.Error("CallClaude activity failed", "error", err, "iteration", i)
+			return models.AgentSuggestion{
+				Timestamp: workflow.Now(ctx),
+				TaskType:  signal.TaskType,
+				Request:   signal.Context,
+				Response:  fmt.Sprintf("Agent failed: %s", err.Error()),
+			}
+		}
+
+		// Append assistant response to conversation.
+		messages = append(messages, agent.Message{
+			Role:    "assistant",
+			Content: claudeResp.Content,
+		})
+
+		// If Claude is done, break.
+		if claudeResp.StopReason == "end_turn" {
+			break
+		}
+
+		// Process tool_use blocks.
+		var toolResults []agent.ContentBlock
+		for _, block := range claudeResp.Content {
+			if block.Type != "tool_use" {
+				continue
+			}
+
+			logger.Info("Agent calling tool", "tool", block.Name, "iteration", i)
+
+			var toolResp agent.ExecuteToolResponse
+			err := workflow.ExecuteActivity(toolActCtx, "ExecuteAgentTool", agent.ExecuteToolRequest{
+				ToolName:  block.Name,
+				ToolInput: block.Input,
+				State:     state,
+			}).Get(ctx, &toolResp)
+			if err != nil {
+				// Activity itself failed (not a tool error) — return error to Claude.
+				toolResults = append(toolResults, agent.ContentBlock{
+					Type:      "tool_result",
+					ToolUseID: block.ID,
+					Content:   fmt.Sprintf("Activity error: %s", err.Error()),
+					IsError:   true,
+				})
+				continue
+			}
+
+			toolResults = append(toolResults, agent.ContentBlock{
+				Type:      "tool_result",
+				ToolUseID: block.ID,
+				Content:   toolResp.Content,
+				IsError:   toolResp.IsError,
+			})
+		}
+
+		// Append tool results as a user message.
+		messages = append(messages, agent.Message{
+			Role:    "user",
+			Content: toolResults,
+		})
+
+		// If we're at the iteration limit, force Claude to wrap up.
+		if i == maxIterations-2 {
+			messages = append(messages, agent.Message{
+				Role: "user",
+				Content: []agent.ContentBlock{
+					{Type: "text", Text: "You have reached the tool call limit. Please provide your final answer now."},
+				},
+			})
+		}
+	}
+
+	// Build the suggestion from the final response.
+	finalText := agent.ExtractFinalText(messages[len(messages)-1].Content)
+	if messages[len(messages)-1].Role != "assistant" && len(messages) >= 2 {
+		// Last message might be tool results; check the one before.
+		for i := len(messages) - 1; i >= 0; i-- {
+			if messages[i].Role == "assistant" {
+				finalText = agent.ExtractFinalText(messages[i].Content)
+				break
+			}
+		}
+	}
+
+	draftMessage := agent.ExtractDraftMessage(messages)
+
+	suggestion := models.AgentSuggestion{
+		Timestamp:    workflow.Now(ctx),
+		TaskType:     signal.TaskType,
+		ContactName:  signal.ContactName,
+		Request:      signal.Context,
+		Response:     finalText,
+		DraftMessage: draftMessage,
+	}
+
+	// Persist to database.
+	workflowID := fmt.Sprintf("outreach-%s", state.Slug)
+	_ = workflow.ExecuteActivity(saveActCtx, "SaveAgentSuggestion", agent.SaveSuggestionRequest{
+		WorkflowID: workflowID,
+		Suggestion: suggestion,
+	}).Get(ctx, nil)
+
+	return suggestion
 }

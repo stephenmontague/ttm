@@ -21,9 +21,9 @@ func sanitizeEvent(event *models.ActivityEvent) string {
 		return "Contact updated"
 	case "agent_action":
 		if event.Description != "" {
-			return "AI agent " + event.Description + " requested"
+			return "AI agent provided " + event.Description + " assistance"
 		}
-		return "AI agent task requested"
+		return "AI agent task completed"
 	case "status_change":
 		return "Workflow " + event.Description
 	case "meeting_booked":

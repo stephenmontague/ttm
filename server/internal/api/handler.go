@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
 
 	"github.com/stephenmontague/ttm-tracker/server/internal/config"
@@ -85,9 +87,14 @@ func (h *Handler) reconcileStatuses(ctx context.Context, companies []repository.
 		}
 		desc, err := h.temporalClient.DescribeWorkflowExecution(ctx, c.ID, "")
 		if err != nil {
-			log.Printf("Failed to describe workflow %s, marking terminated: %v", c.ID, err)
-			c.Status = "terminated"
-			_ = h.companyRepo.UpdateStatus(ctx, c.ID, "terminated")
+			var notFound *serviceerror.NotFound
+			if errors.As(err, &notFound) {
+				log.Printf("Workflow %s not found in Temporal, marking terminated", c.ID)
+				c.Status = "terminated"
+				_ = h.companyRepo.UpdateStatus(ctx, c.ID, "terminated")
+			} else {
+				log.Printf("Failed to describe workflow %s (skipping): %v", c.ID, err)
+			}
 			continue
 		}
 		status := desc.WorkflowExecutionInfo.Status
@@ -265,6 +272,39 @@ func (h *Handler) GetAdminCompany(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, state)
 }
 
+// ReconcileCompanyStatus checks the real Temporal status for a workflow
+// and updates the DB cache to match. Used by the admin refresh button.
+func (h *Handler) ReconcileCompanyStatus(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	workflowID := "outreach-" + slug
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	desc, err := h.temporalClient.DescribeWorkflowExecution(ctx, workflowID, "")
+	if err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			_ = h.companyRepo.UpdateStatus(r.Context(), workflowID, "terminated")
+			respondJSON(w, http.StatusOK, map[string]any{"status": "terminated"})
+		} else {
+			respondError(w, http.StatusBadGateway, "Failed to reach Temporal: "+err.Error())
+		}
+		return
+	}
+
+	temporalStatus := desc.WorkflowExecutionInfo.Status
+	var newStatus string
+	if temporalStatus == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		newStatus = "active"
+	} else {
+		newStatus = strings.ToLower(strings.TrimPrefix(temporalStatus.String(), "WORKFLOW_EXECUTION_STATUS_"))
+	}
+
+	_ = h.companyRepo.UpdateStatus(r.Context(), workflowID, newStatus)
+	respondJSON(w, http.StatusOK, map[string]any{"status": newStatus})
+}
+
 type LogOutreachRequest struct {
 	Channel     string `json:"channel"`
 	Notes       string `json:"notes"`
@@ -358,8 +398,9 @@ func (h *Handler) SignalRemoveContact(w http.ResponseWriter, r *http.Request) {
 }
 
 type RequestAgentRequest struct {
-	TaskType string `json:"taskType"`
-	Context  string `json:"context"`
+	TaskType    string `json:"taskType"`
+	Context     string `json:"context"`
+	ContactName string `json:"contactName"`
 }
 
 // SignalRequestAgent sends a RequestAgentHelp signal to the workflow.
@@ -374,8 +415,9 @@ func (h *Handler) SignalRequestAgent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	signal := models.RequestAgentHelpSignal{
-		TaskType: req.TaskType,
-		Context:  req.Context,
+		TaskType:    req.TaskType,
+		Context:     req.Context,
+		ContactName: req.ContactName,
 	}
 
 	err := h.temporalClient.SignalWorkflow(r.Context(), workflowID, "", config.SignalRequestAgent, signal)

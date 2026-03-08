@@ -64,6 +64,23 @@ func GetSessionCookieName() string {
 	return DefaultSessionCookieName
 }
 
+// AI Agent config
+
+func GetAnthropicAPIKey() string {
+	return os.Getenv("ANTHROPIC_API_KEY")
+}
+
+func GetClaudeModel() string {
+	if m := os.Getenv("CLAUDE_MODEL"); m != "" {
+		return m
+	}
+	return "claude-sonnet-4-20250514"
+}
+
+func GetLushaAPIKey() string {
+	return os.Getenv("LUSHA_API_KEY")
+}
+
 func GetSessionMaxAge() int {
 	if s := os.Getenv("SESSION_MAX_AGE"); s != "" {
 		if v, err := strconv.Atoi(s); err == nil && v > 0 {

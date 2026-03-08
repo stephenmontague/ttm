@@ -29,16 +29,23 @@ func NewWorkflowState(params WorkflowParams, startedAt time.Time) *WorkflowState
 
 // WorkflowState is the complete state of a single company's outreach workflow.
 type WorkflowState struct {
-	CompanyName        string
-	Slug               string
-	StartedAt          time.Time
-	Status             string // "active", "meeting_booked"
-	CurrentContact     *Contact // Deprecated: kept for backward compat.
-	Contacts           []Contact
-	OutreachAttempts   []OutreachAttempt
-	AgentSuggestions   []AgentSuggestion
-	WorkerRestartCount int
-	LastSnapshotAt     time.Time
-	MeetingBookedAt    *time.Time
-	MeetingNotes       string
+	CompanyName         string
+	Slug                string
+	StartedAt           time.Time
+	Status              string // "active", "meeting_booked"
+	CurrentContact      *Contact // Deprecated: kept for backward compat.
+	Contacts            []Contact
+	OutreachAttempts    []OutreachAttempt
+	AgentSuggestions    []AgentSuggestion
+	AgentTaskInProgress bool
+	WorkerRestartCount  int
+	LastSnapshotAt      time.Time
+	MeetingBookedAt     *time.Time
+	MeetingNotes        string
+}
+
+// PersistWorkflowStateRequest is the input for the PersistWorkflowState activity.
+type PersistWorkflowStateRequest struct {
+	State *WorkflowState
+	Event *ActivityEvent
 }

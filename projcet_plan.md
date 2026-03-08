@@ -677,82 +677,80 @@ ENVIRONMENT=development
 
 ---
 
-### Phase 3: Authentication & Admin Login
+### Phase 3: Authentication & Admin Login ✅ COMPLETE
 
 **Goal:** Lock down all admin functionality behind a real login page. You are the only user — the database is seeded with your account. Everyone else sees the public pages only.
+
+**Status:** Complete. All tasks done. Admin dashboard fully locked down behind session-based login.
 
 **Design decisions:**
 - **Single-user model** — the `admin_users` table is seeded with one row (you). There is no registration flow.
 - **Hidden login page** — `/admin/login` exists but is not linked from any public navigation. You navigate to it directly.
-- **Session-based auth** — login sets an HTTP-only, secure cookie containing a session token. No JWTs, no client-side token storage.
-- **Server-side enforcement** — the Next.js admin layout (`app/admin/layout.tsx`) checks the session cookie server-side and redirects unauthenticated requests to `/admin/login`. The Go backend admin endpoints also validate the session.
+- **Session-based auth** — login sets an HTTP-only cookie containing a 256-bit random session token. No JWTs, no client-side token storage.
+- **Server-side enforcement** — the Next.js admin layout uses a `(protected)` route group with a server-side cookie check that redirects unauthenticated requests to `/admin/login`. The Go backend admin endpoints also validate the session via `RequireSession` middleware.
 - **Password hashing** — bcrypt-hashed password stored in the database. Plaintext password never persisted.
+- **Sliding session expiry** — each authenticated request extends the session by 7 days. Expired sessions are lazily cleaned up.
 
-**Database additions:**
-
-```sql
--- Single admin user (seeded, no registration)
-CREATE TABLE admin_users (
-    id            SERIAL PRIMARY KEY,
-    email         TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,       -- bcrypt
-    created_at    TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-);
-
--- Active sessions
-CREATE TABLE admin_sessions (
-    id         TEXT PRIMARY KEY,        -- secure random token
-    user_id    INTEGER NOT NULL REFERENCES admin_users(id),
-    expires_at TIMESTAMPTZ NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-);
-```
+**Architecture:** Browser → Next.js API routes (forward cookie) → Go backend (validates session in DB). Next.js never reads the session token — it just proxies the `Cookie` header to Go.
 
 **Tasks:**
 
-1. **Database schema + seed** — add `admin_users` and `admin_sessions` tables to the migration. Seed script inserts your account (email + bcrypt-hashed password from `ADMIN_SEED_EMAIL` / `ADMIN_SEED_PASSWORD` env vars). Runs on startup, skips if user already exists.
-2. **Go auth endpoints** — `POST /api/auth/login` (validates credentials, creates session, sets cookie) and `POST /api/auth/logout` (deletes session, clears cookie). `GET /api/auth/me` returns the current user or 401.
-3. **Go admin middleware** — middleware on all `/api/admin/*` routes that reads the session cookie, looks up the session in the database, and rejects expired or missing sessions with 401.
-4. **Next.js login page** — `/admin/login` with email + password form. On success, redirects to `/admin`. Clean, minimal UI using shadcn/ui components. Not linked from public nav.
-5. **Next.js admin layout guard** — `app/admin/layout.tsx` calls `GET /api/auth/me` server-side. If unauthenticated, redirects to `/admin/login`. All admin pages are protected by this layout.
-6. **Next.js API route proxying** — admin API routes (`app/api/admin/*`) forward the session cookie to the Go backend so the Go middleware can validate it.
-7. **Logout button** — add a logout button to the admin header/nav. Calls `POST /api/auth/logout`, clears the cookie, redirects to `/`.
-8. **Session expiry + cleanup** — sessions expire after 7 days. The Go backend deletes expired sessions on login and periodically (or lazily on each auth check).
+1. ~~**Database schema + seed** — `admin_users` and `admin_sessions` tables added to migrations. Admin account seeded from `ADMIN_SEED_EMAIL` / `ADMIN_SEED_PASSWORD` env vars on startup via `UpsertAdminUser` (idempotent).~~ ✅
+2. ~~**Go auth endpoints** — `POST /api/auth/login` (validates credentials, creates session, sets cookie) and `POST /api/auth/logout` (deletes session, clears cookie). `GET /api/admin/auth/status` returns 200 if session valid (behind middleware).~~ ✅
+3. ~~**Go admin middleware** — `RequireSession` middleware on all `/api/admin/*` routes reads session cookie, validates against DB, returns 401 if invalid/missing.~~ ✅
+4. ~~**Next.js login page** — `/admin/login` with email + password form. On success, redirects to `/admin`. Clean UI using shadcn Card/Input/Button. Not linked from public nav.~~ ✅
+5. ~~**Next.js admin layout guard** — `app/admin/(protected)/layout.tsx` checks session cookie server-side and redirects to `/admin/login` if absent. Login page sits outside the route group so it's never guarded.~~ ✅
+6. ~~**Next.js API route proxying** — admin API routes forward the session cookie to the Go backend via `cookieHeader` parameter added to `backendGet`/`backendPost`.~~ ✅
+7. ~~**Logout button** — logout button in site header (visible only when logged in). Admin nav link also conditionally rendered. Calls `POST /api/auth/logout`, clears cookie, redirects to `/admin/login`.~~ ✅
+8. ~~**Session expiry + cleanup** — sliding 7-day expiry: each valid request extends `expires_at`. Expired sessions lazily deleted in background goroutine on validation.~~ ✅
 
-**Environment variables added:**
+**Deviations from original plan:**
+- Used `(protected)` route group instead of checking pathname in a single layout — cleaner separation, login page can never accidentally be guarded
+- `GET /api/auth/me` became `GET /api/admin/auth/status` — placed inside the admin group so the middleware does the validation, handler just returns 200
+- Added sliding session expiry (each request extends the 7-day window) instead of fixed expiry
+- Site header conditionally renders Admin link and logout button based on cookie presence (server component reads cookies)
 
-```bash
-# Admin seed (used once on first startup to create your account)
-ADMIN_SEED_EMAIL=you@example.com
-ADMIN_SEED_PASSWORD=your-secure-password
+**Security notes:**
+- Cookie: `HttpOnly`, `SameSite: Lax`, `Secure: false` (toggle to `true` for production HTTPS in Phase 5)
+- Session tokens: 64-char hex (256 bits entropy), not guessable
+- Login rate limiting planned for Phase 5 (low risk now — hidden login page, single user)
 
-# Session cookie
-SESSION_COOKIE_NAME=ttm_session
-SESSION_MAX_AGE=604800  # 7 days in seconds
-```
-
-**Deliverable:** The admin dashboard is fully locked down. You log in at `/admin/login`, get a session cookie, and access all admin features. Anyone without the cookie sees only public pages. No registration, no invite flow — just you.
+**Deliverable:** ✅ The admin dashboard is fully locked down. You log in at `/admin/login`, get a session cookie, and access all admin features. Anyone without the cookie sees only public pages. No registration, no invite flow — just you.
 
 ---
 
-### Phase 4: AI Agent Integration
+### Phase 4: AI Agent Integration ✅ COMPLETE
 
 **Goal:** Add a real agentic activity that uses Claude's tool-use to autonomously research and assist with outreach.
 
+**Status:** Complete. All core tasks done plus significant UX enhancements beyond the original plan.
+
+**Architecture:** The agent runs as a series of Temporal activities (`CallClaude`, `ExecuteAgentTool`, `SaveAgentSuggestion`) orchestrated by an agentic loop in the workflow. Each Claude API call and tool execution is a separate activity for independent retry and visibility. The workflow sets `AgentTaskInProgress` flag on the live state so queries reflect the agent's working status immediately.
+
+**Activity parameter best practice:** Refactored `PersistWorkflowState` from bare parameters `(state, event)` to a single `PersistWorkflowStateRequest` struct, following Temporal's recommended pattern for forward compatibility.
+
 **Tasks:**
 
-1. **Claude API client with tool-use loop** - Go client that calls Claude Messages API, detects `tool_use` response blocks, executes the requested tools, and loops until Claude returns a final text response
-2. **Web search tool** - integrate Brave Search API (free tier: 2,000 queries/month) as a tool Claude can call
-3. **Tool definitions** - define tools in Claude's tool-use format: `web_search`, `get_workflow_state`, `draft_message`
-4. **System prompts** - task-specific system prompts for `find_contact`, `draft_message`, `next_action` that guide the agent's reasoning
-5. **RunAgent activity** - Temporal activity that runs the agentic loop with a timeout (max 60 seconds, max 10 tool calls)
-6. **Agent signal handler** - `RequestAgentHelp` signal triggers the activity
-7. **Agent suggestions storage** - save full agent trace (tools called, reasoning, final output) to `agent_suggestions` table
-8. **Admin agent UI** - display agent responses with expandable tool call trace, copy draft messages
-9. **Public agent callout** - sanitized mention on public feed ("AI agent researched company and suggested next action")
-10. *(Optional)* **Apollo.io integration** - add `get_company_profile` tool for structured people/company data
+1. ~~**Claude API client with tool-use loop** - Go client (`server/internal/agent/client.go`) calls Claude Messages API, detects `tool_use` response blocks, executes tools via activities, loops until `end_turn` (max 10 iterations)~~ ✅
+2. ~~**Web search tool** - Brave Search API integration not yet implemented~~ ⏭️ (deferred — Lusha contact/company search covers the primary use case)
+3. ~~**Tool definitions** - `get_workflow_state`, `draft_message`, `lusha_contact_search`, `lusha_company_search` defined in `server/internal/agent/tools.go`~~ ✅
+4. ~~**System prompts** - task-specific system prompts for `draft_message`, `suggest_contact`, `next_action` with contact-aware context injection (`server/internal/agent/prompts.go`)~~ ✅
+5. ~~**RunAgent activity** - Agentic loop runs in workflow (`runAgentLoop` in `workflow.go`) orchestrating `CallClaude` and `ExecuteAgentTool` activities with timeouts and retry policies~~ ✅
+6. ~~**Agent signal handler** - `RequestAgentHelp` signal triggers `runAgentLoop`, sets/clears `AgentTaskInProgress` flag on workflow state~~ ✅
+7. ~~**Agent suggestions storage** - `SaveAgentSuggestion` activity persists suggestions; also stored in workflow state for query access~~ ✅
+8. ~~**Admin agent UI** - Dedicated agent page (`/admin/company/[slug]/agent`) with contact picker, task type selector, adaptive polling (2s while agent working, 10s otherwise), suggestion history with contact filtering, copy-to-clipboard for drafts, markdown rendering via `react-markdown`~~ ✅
+9. ~~**Public agent callout** - sanitized mention on public feed ("AI agent researched company and suggested next action")~~ ✅ (activity feed events generated by `PersistWorkflowState`)
+10. ~~**Lusha integration** - `lusha_contact_search` and `lusha_company_search` tools with plug-and-play activation via `LUSHA_API_KEY` env var. `CheckLushaEnabled` activity respects workflow determinism.~~ ✅ (replaces Apollo.io from original plan)
 
-**Deliverable:** A genuinely agentic workflow - you trigger "find me a new contact at Whoop" from the admin panel, and Claude autonomously searches the web, evaluates candidates, researches them, and returns a suggested contact with a personalized draft message. All orchestrated by Temporal.
+**Enhancements beyond original plan:**
+- **Dedicated agent page** — moved from a tab in SignalPanel to a full-screen agent experience at `/admin/company/[slug]/agent`
+- **Contact-centric agent requests** — `ContactName` field on `RequestAgentHelpSignal` and `AgentSuggestion`; contact name/role injected into Claude prompts
+- **Loading state** — `AgentTaskInProgress` flag on `WorkflowState` enables real-time feedback via adaptive polling
+- **Markdown rendering** — agent responses rendered with proper styling (headings, lists, bold, code blocks) via `react-markdown` + custom CSS
+- **Reconcile endpoint** — admin can manually sync DB status with Temporal via refresh button (`POST /admin/companies/:slug/reconcile`)
+- **Workflow status resilience** — `reconcileStatuses` now distinguishes `serviceerror.NotFound` from transient connection errors, preventing false "terminated" status
+
+**Deliverable:** ✅ A genuinely agentic workflow - you trigger "draft a message for Stephen Montague at Whoop" from the dedicated agent page, and Claude autonomously inspects workflow state, researches the contact, and returns a personalized draft message with markdown formatting. All orchestrated by Temporal with real-time loading feedback.
 
 ---
 

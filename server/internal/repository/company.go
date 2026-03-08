@@ -192,6 +192,18 @@ func (r *CompanyRepository) GetCompanyByPublicID(ctx context.Context, publicID s
 	return &c, nil
 }
 
+// InsertAgentSuggestion persists an agent suggestion to the database.
+func (r *CompanyRepository) InsertAgentSuggestion(ctx context.Context, workflowID, taskType, request, response, draftMessage string) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO agent_suggestions (workflow_id, task_type, request, response, draft_message)
+		VALUES ($1, $2, $3, $4, $5)
+	`, workflowID, taskType, request, response, draftMessage)
+	if err != nil {
+		return fmt.Errorf("insert agent suggestion: %w", err)
+	}
+	return nil
+}
+
 // GetActivityFeed returns the sanitized activity feed for a company.
 func (r *CompanyRepository) GetActivityFeed(ctx context.Context, workflowID string) ([]ActivityFeedRow, error) {
 	rows, err := r.pool.Query(ctx, `

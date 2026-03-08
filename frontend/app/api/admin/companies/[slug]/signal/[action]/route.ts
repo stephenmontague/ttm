@@ -19,7 +19,7 @@ function validateBody(action: SignalAction, body: Record<string, unknown>): stri
       if (!body.name || typeof body.name !== "string") return "name is required";
       return null;
     case "agent":
-      if (!body.task_type || typeof body.task_type !== "string") return "task_type is required";
+      if (!body.taskType || typeof body.taskType !== "string") return "taskType is required";
       return null;
     case "booked":
       if (!body.notes || typeof body.notes !== "string") return "notes is required";

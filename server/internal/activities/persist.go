@@ -16,8 +16,11 @@ import (
 // optionally writes a sanitized event to the public activity feed — all in
 // a single database transaction. The public UI reads from these tables instead
 // of querying Temporal directly.
-func (a *Activities) PersistWorkflowState(ctx context.Context, state *models.WorkflowState, event *models.ActivityEvent) error {
+func (a *Activities) PersistWorkflowState(ctx context.Context, req models.PersistWorkflowStateRequest) error {
 	logger := activity.GetLogger(ctx)
+
+	state := req.State
+	event := req.Event
 
 	now := time.Now()
 	elapsedDays := int(math.Floor(now.Sub(state.StartedAt).Hours() / 24))
@@ -89,6 +92,6 @@ func (a *Activities) PersistWorkflowState(ctx context.Context, state *models.Wor
 // SnapshotStateToCache is a backward-compatibility wrapper for in-flight
 // workflows whose Temporal event history references the old activity name.
 // Remove after all running workflows have continued-as-new.
-func (a *Activities) SnapshotStateToCache(ctx context.Context, state *models.WorkflowState) error {
-	return a.PersistWorkflowState(ctx, state, nil)
+func (a *Activities) SnapshotStateToCache(ctx context.Context, req models.PersistWorkflowStateRequest) error {
+	return a.PersistWorkflowState(ctx, req)
 }

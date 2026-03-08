@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/stephenmontague/ttm-tracker/server/internal/activities"
+	agentactivities "github.com/stephenmontague/ttm-tracker/server/internal/activities/agent"
 	"github.com/stephenmontague/ttm-tracker/server/internal/config"
 	"github.com/stephenmontague/ttm-tracker/server/internal/database"
 	"github.com/stephenmontague/ttm-tracker/server/internal/repository"
@@ -58,6 +59,12 @@ func main() {
 		Name: config.WorkflowName,
 	})
 	w.RegisterActivity(acts)
+
+	// Register agent activities (CallClaude, ExecuteAgentTool, SaveAgentSuggestion)
+	agentActs := &agentactivities.AgentActivities{
+		CompanyRepo: companyRepo,
+	}
+	w.RegisterActivity(agentActs)
 
 	log.Printf("Starting worker on task queue: %s", taskQueue)
 	err = w.Run(worker.InterruptCh())

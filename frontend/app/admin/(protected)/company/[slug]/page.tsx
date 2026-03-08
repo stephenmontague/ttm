@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { usePolling } from "@/hooks/use-polling";
@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, RefreshCw, Users, Mail, X } from "lucide-react";
+import { ArrowLeft, RefreshCw, Users, Mail, Bot, X } from "lucide-react";
 import type { WorkflowState, Contact } from "@/lib/types";
 
 export default function AdminCompanyDetailPage() {
@@ -31,6 +31,18 @@ export default function AdminCompanyDetailPage() {
   });
 
   const { send } = useSignal({ slug, onSuccess: refresh });
+
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      // Reconcile DB status with Temporal before refreshing state
+      await fetch(`/api/admin/companies/${slug}/reconcile`, { method: "POST" });
+      await refresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [slug, refresh]);
 
   if (loading && !state) {
     return (
@@ -92,9 +104,14 @@ export default function AdminCompanyDetailPage() {
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge status={state.Status} />
-          <Button variant="outline" size="icon" className="h-9 w-9" onClick={refresh}>
-            <RefreshCw className="h-4 w-4" />
+          <Button variant="outline" size="icon" className="h-9 w-9" onClick={handleRefresh} disabled={refreshing}>
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
           </Button>
+          <Link href={`/admin/company/${slug}/agent`}>
+            <Button variant="outline" size="icon" className="h-9 w-9">
+              <Bot className="h-4 w-4" />
+            </Button>
+          </Link>
         </div>
       </div>
 
@@ -230,49 +247,64 @@ export default function AdminCompanyDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Agent Suggestions (Phase 3) */}
-          {state.AgentSuggestions && state.AgentSuggestions.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Agent Suggestions</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {state.AgentSuggestions.map((suggestion, i) => (
-                    <div key={i} className="rounded-lg bg-muted/50 p-4">
-                      <div className="flex items-center gap-2 mb-2">
+          {/* Agent Suggestions — compact summary */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Bot className="h-4 w-4" />
+                Agent Suggestions
+                {state.AgentSuggestions && state.AgentSuggestions.length > 0 && (
+                  <span className="ml-auto text-sm font-normal text-muted-foreground">
+                    {state.AgentSuggestions.length} total
+                  </span>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!state.AgentSuggestions || state.AgentSuggestions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No agent suggestions yet.{" "}
+                  <Link href={`/admin/company/${slug}/agent`} className="underline underline-offset-4 hover:text-foreground">
+                    Ask the agent
+                  </Link>{" "}
+                  for help.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {state.AgentSuggestions.slice(-3).reverse().map((s, i) => (
+                    <div key={i} className="rounded-lg bg-muted/50 p-3">
+                      <div className="flex items-center gap-2 mb-1">
                         <Badge variant="outline" className="text-xs">
-                          {suggestion.TaskType}
+                          {s.TaskType.replace("_", " ")}
                         </Badge>
+                        {s.ContactName && (
+                          <Badge variant="secondary" className="text-xs">{s.ContactName}</Badge>
+                        )}
                         <time className="text-xs text-muted-foreground">
-                          {new Date(suggestion.Timestamp).toLocaleDateString()}
+                          {new Date(s.Timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                         </time>
                       </div>
-                      <p className="text-sm whitespace-pre-wrap">{suggestion.Response}</p>
-                      {suggestion.DraftMessage && (
-                        <div className="mt-3 rounded-md border bg-card p-3">
-                          <p className="mb-1 text-xs font-medium text-muted-foreground">
-                            Draft Message
-                          </p>
-                          <p className="text-sm whitespace-pre-wrap">{suggestion.DraftMessage}</p>
-                        </div>
-                      )}
+                      <p className="text-sm text-muted-foreground line-clamp-2">{s.Response}</p>
                     </div>
                   ))}
+                  <Link
+                    href={`/admin/company/${slug}/agent`}
+                    className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground underline underline-offset-4"
+                  >
+                    View all & ask agent
+                  </Link>
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* Right column — Signal Panel */}
         <div>
-          <h2 className="mb-4 text-sm font-medium uppercase tracking-wider text-muted-foreground">
-            Signals
-          </h2>
           <SignalPanel slug={slug} status={state.Status} contacts={activeContacts} onSuccess={refresh} />
         </div>
       </div>
     </div>
   );
 }
+
