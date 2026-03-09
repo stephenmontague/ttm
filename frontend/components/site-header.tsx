@@ -1,8 +1,8 @@
+import { LogoutButton } from "@/components/logout-button";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { cookies } from "next/headers";
 import Image from "next/image";
 import Link from "next/link";
-import { cookies } from "next/headers";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { LogoutButton } from "@/components/logout-button";
 
 const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || "ttm_session";
 
@@ -11,7 +11,7 @@ export async function SiteHeader() {
   const isLoggedIn = !!cookieStore.get(COOKIE_NAME)?.value;
 
   return (
-    <header className="gradient-border-b sticky top-0 z-50 w-full bg-background/70 backdrop-blur-xl relative">
+    <header className="gradient-border-b sticky top-0 z-50 w-full bg-background/70 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
         <Link href="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-80">
           <Image
