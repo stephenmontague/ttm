@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/go-chi/httprate"
 	"github.com/joho/godotenv"
 	"golang.org/x/crypto/bcrypt"
 
@@ -95,13 +96,16 @@ func main() {
 	})
 
 	r.Route("/api", func(r chi.Router) {
+		// Rate limit all API routes: 100 requests per minute per IP
+		r.Use(httprate.LimitByIP(100, 1*time.Minute))
+
 		// Public endpoints
 		r.Get("/companies", handler.ListCompanies)
 		r.Get("/companies/{slug}", handler.GetCompany)
 		r.Get("/companies/{slug}/feed", handler.GetCompanyFeed)
 
 		// Auth endpoints (public — no session required)
-		r.Post("/auth/login", handler.PostLogin)
+		r.With(httprate.LimitByIP(5, 1*time.Minute)).Post("/auth/login", handler.PostLogin)
 		r.Post("/auth/logout", handler.PostLogout)
 
 		// Admin endpoints (protected by session middleware)

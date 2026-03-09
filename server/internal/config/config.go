@@ -17,7 +17,8 @@ const (
 	SignalAddContact    = "add_contact"
 	SignalRemoveContact = "remove_contact"
 	SignalRequestAgent  = "request_agent_help"
-	SignalMeetingBooked = "meeting_booked"
+	SignalMeetingBooked   = "meeting_booked"
+	SignalWorkerRestarted = "worker_restarted"
 )
 
 // Query names

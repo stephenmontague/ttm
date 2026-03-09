@@ -147,7 +147,7 @@ export function SignalPanel({ slug, status, contacts, onSuccess }: SignalPanelPr
           {/* Add Contact */}
           <TabsContent value="contact" className={!isActive ? "opacity-50 pointer-events-none" : ""}>
             <div className="space-y-3 pt-2">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="contact-name" className="text-xs">Name</Label>
                   <Input

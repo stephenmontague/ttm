@@ -6,8 +6,8 @@ import { DashboardContent } from "./dashboard-content";
 
 async function getCompanies(): Promise<Company[]> {
   const { data, ok } = await backendGet<{ companies: Company[] }>("/companies");
-  if (!ok || !data.companies) return [];
-  return data.companies;
+  if (!ok) throw new Error("Failed to load companies");
+  return data.companies ?? [];
 }
 
 export default async function HomePage() {

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -91,15 +92,19 @@ func (r *AuthRepository) ValidateSession(ctx context.Context, token string, maxA
 
 	// Sliding expiry: extend the session on each valid request.
 	newExpiry := time.Now().Add(time.Duration(maxAgeSecs) * time.Second)
-	_, _ = r.pool.Exec(ctx, `
+	if _, err := r.pool.Exec(ctx, `
 		UPDATE admin_sessions SET expires_at = $1 WHERE token = $2
-	`, newExpiry, token)
+	`, newExpiry, token); err != nil {
+		log.Printf("Failed to extend session expiry: %v", err)
+	}
 
 	// Lazy cleanup: delete expired sessions for this user in the background.
 	go func() {
-		_, _ = r.pool.Exec(context.Background(), `
+		if _, err := r.pool.Exec(context.Background(), `
 			DELETE FROM admin_sessions WHERE user_id = $1 AND expires_at <= NOW()
-		`, s.UserID)
+		`, s.UserID); err != nil {
+			log.Printf("Failed to clean up expired sessions: %v", err)
+		}
 	}()
 
 	return &s, nil

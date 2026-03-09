@@ -32,10 +32,10 @@ export function CompanyStats({ outreachCount, contactCount, restartCount, elapse
   ];
 
   return (
-    <div className="grid grid-cols-4 divide-x rounded-lg border bg-card">
+    <div className="grid grid-cols-2 sm:grid-cols-4 divide-x rounded-lg border bg-card">
       {stats.map((stat) => (
-        <div key={stat.label} className="flex flex-col items-center gap-1 px-6 py-4">
-          <stat.icon className="h-4 w-4 text-muted-foreground" />
+        <div key={stat.label} className="flex flex-col items-center gap-1 px-3 py-3 sm:px-6 sm:py-4">
+          <stat.icon className="h-4 w-4 text-primary" />
           <span className="text-2xl font-semibold tabular-nums">{stat.value ?? 0}</span>
           <span className="text-xs text-muted-foreground">{stat.label}</span>
         </div>

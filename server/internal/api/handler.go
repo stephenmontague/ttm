@@ -250,6 +250,7 @@ func (h *Handler) CreateCompany(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetAdminCompany returns full workflow state via Temporal query (including PII).
+// Falls back to a 404 if the workflow no longer exists in Temporal.
 func (h *Handler) GetAdminCompany(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	workflowID := "outreach-" + slug
@@ -259,7 +260,12 @@ func (h *Handler) GetAdminCompany(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.temporalClient.QueryWorkflow(ctx, workflowID, "", config.QueryGetState)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to query workflow: "+err.Error())
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			respondError(w, http.StatusNotFound, "Workflow not found in Temporal")
+			return
+		}
+		respondError(w, http.StatusBadGateway, "Failed to query workflow: "+err.Error())
 		return
 	}
 

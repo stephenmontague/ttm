@@ -13,6 +13,14 @@ import (
 	"github.com/stephenmontague/ttm-tracker/server/internal/models"
 )
 
+// persistState is a helper that executes PersistWorkflowState and logs errors
+// without failing the workflow.
+func persistState(ctx, actCtx workflow.Context, logger log.Logger, req models.PersistWorkflowStateRequest) {
+	if err := workflow.ExecuteActivity(actCtx, "PersistWorkflowState", req).Get(ctx, nil); err != nil {
+		logger.Error("Failed to persist workflow state", "error", err)
+	}
+}
+
 // Workflow is a long-running workflow that tracks outreach to a single company.
 // One workflow instance runs per company, potentially for weeks or months,
 // until a meeting is booked.
@@ -41,13 +49,14 @@ func Workflow(ctx workflow.Context, params models.WorkflowParams) (*models.Workf
 	updateContactCh := workflow.GetSignalChannel(ctx, config.SignalUpdateContact) // Deprecated: backward compat.
 	agentHelpCh := workflow.GetSignalChannel(ctx, config.SignalRequestAgent)
 	meetingBookedCh := workflow.GetSignalChannel(ctx, config.SignalMeetingBooked)
+	workerRestartCh := workflow.GetSignalChannel(ctx, config.SignalWorkerRestarted)
 
 	actCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
 	})
 
 	// Initial persist so the company appears in the dashboard immediately.
-	_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", models.PersistWorkflowStateRequest{State: state, Event: &models.ActivityEvent{EventType: "workflow_started"}}).Get(ctx, nil)
+	persistState(ctx, actCtx, logger, models.PersistWorkflowStateRequest{State: state, Event: &models.ActivityEvent{EventType: "workflow_started"}})
 	state.LastSnapshotAt = workflow.Now(ctx)
 
 	// Create one timer that we cancel and recreate only when it fires.
@@ -79,10 +88,10 @@ func Workflow(ctx workflow.Context, params models.WorkflowParams) (*models.Workf
 			})
 
 			logger.Info("Outreach logged", "channel", signal.Channel, "contact", contactName, "total_attempts", len(state.OutreachAttempts))
-			_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", models.PersistWorkflowStateRequest{State: state, Event: &models.ActivityEvent{
+			persistState(ctx, actCtx, logger, models.PersistWorkflowStateRequest{State: state, Event: &models.ActivityEvent{
 				EventType: "outreach",
 				Channel:   signal.Channel,
-				}}).Get(ctx, nil)
+			}})
 			state.LastSnapshotAt = workflow.Now(ctx)
 		})
 
@@ -111,10 +120,10 @@ func Workflow(ctx workflow.Context, params models.WorkflowParams) (*models.Workf
 			}
 
 			logger.Info("Contact added", "name", signal.Name, "role", signal.Role, "total_contacts", len(state.Contacts))
-			_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", models.PersistWorkflowStateRequest{State: state, Event: &models.ActivityEvent{
+			persistState(ctx, actCtx, logger, models.PersistWorkflowStateRequest{State: state, Event: &models.ActivityEvent{
 				EventType:   "contact_change",
 				Description: signal.Role,
-				}}).Get(ctx, nil)
+			}})
 			state.LastSnapshotAt = workflow.Now(ctx)
 		})
 
@@ -130,10 +139,10 @@ func Workflow(ctx workflow.Context, params models.WorkflowParams) (*models.Workf
 			}
 
 			logger.Info("Contact deactivated", "name", signal.Name)
-			_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", models.PersistWorkflowStateRequest{State: state, Event: &models.ActivityEvent{
+			persistState(ctx, actCtx, logger, models.PersistWorkflowStateRequest{State: state, Event: &models.ActivityEvent{
 				EventType:   "contact_change",
 				Description: "contact removed",
-				}}).Get(ctx, nil)
+			}})
 			state.LastSnapshotAt = workflow.Now(ctx)
 		})
 
@@ -173,10 +182,10 @@ func Workflow(ctx workflow.Context, params models.WorkflowParams) (*models.Workf
 			}
 
 			logger.Info("Contact updated (legacy signal)", "name", signal.Name, "role", signal.Role)
-			_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", models.PersistWorkflowStateRequest{State: state, Event: &models.ActivityEvent{
+			persistState(ctx, actCtx, logger, models.PersistWorkflowStateRequest{State: state, Event: &models.ActivityEvent{
 				EventType:   "contact_change",
 				Description: signal.Role,
-				}}).Get(ctx, nil)
+			}})
 			state.LastSnapshotAt = workflow.Now(ctx)
 		})
 
@@ -190,10 +199,10 @@ func Workflow(ctx workflow.Context, params models.WorkflowParams) (*models.Workf
 			state.AgentTaskInProgress = false
 			state.AgentSuggestions = append(state.AgentSuggestions, suggestion)
 
-			_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", models.PersistWorkflowStateRequest{State: state, Event: &models.ActivityEvent{
+			persistState(ctx, actCtx, logger, models.PersistWorkflowStateRequest{State: state, Event: &models.ActivityEvent{
 				EventType:   "agent_action",
 				Description: signal.TaskType,
-				}}).Get(ctx, nil)
+			}})
 			state.LastSnapshotAt = workflow.Now(ctx)
 		})
 
@@ -206,7 +215,19 @@ func Workflow(ctx workflow.Context, params models.WorkflowParams) (*models.Workf
 			state.MeetingNotes = signal.Notes
 
 			logger.Info("Meeting booked!", "date", signal.Date)
-			_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", models.PersistWorkflowStateRequest{State: state, Event: &models.ActivityEvent{EventType: "meeting_booked"}}).Get(ctx, nil)
+			persistState(ctx, actCtx, logger, models.PersistWorkflowStateRequest{State: state, Event: &models.ActivityEvent{EventType: "meeting_booked"}})
+			state.LastSnapshotAt = workflow.Now(ctx)
+		})
+
+		selector.AddReceive(workerRestartCh, func(ch workflow.ReceiveChannel, more bool) {
+			var signal struct{}
+			ch.Receive(ctx, &signal)
+			state.WorkerRestartCount++
+			logger.Info("Worker restart detected", "restart_count", state.WorkerRestartCount)
+			persistState(ctx, actCtx, logger, models.PersistWorkflowStateRequest{
+				State: state,
+				Event: &models.ActivityEvent{EventType: "worker_restart"},
+			})
 			state.LastSnapshotAt = workflow.Now(ctx)
 		})
 
@@ -214,7 +235,7 @@ func Workflow(ctx workflow.Context, params models.WorkflowParams) (*models.Workf
 			_ = f.Get(ctx, nil)
 			timerFired = true
 			logger.Info("Daily timer tick")
-			_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", models.PersistWorkflowStateRequest{State: state}).Get(ctx, nil)
+			persistState(ctx, actCtx, logger, models.PersistWorkflowStateRequest{State: state})
 			state.LastSnapshotAt = workflow.Now(ctx)
 		})
 
@@ -243,7 +264,7 @@ func Workflow(ctx workflow.Context, params models.WorkflowParams) (*models.Workf
 
 	timerCancel()
 
-	_ = workflow.ExecuteActivity(actCtx, "PersistWorkflowState", models.PersistWorkflowStateRequest{State: state}).Get(ctx, nil)
+	persistState(ctx, actCtx, logger, models.PersistWorkflowStateRequest{State: state})
 	state.LastSnapshotAt = workflow.Now(ctx)
 	logger.Info("Workflow completed", "company", state.CompanyName)
 	return state, nil
@@ -278,7 +299,9 @@ func runAgentLoop(ctx workflow.Context, logger log.Logger, state *models.Workflo
 
 	// Check if Lusha API key is configured (activity because workflows can't read env vars).
 	var lushaEnabled bool
-	_ = workflow.ExecuteActivity(saveActCtx, "CheckLushaEnabled").Get(ctx, &lushaEnabled)
+	if err := workflow.ExecuteActivity(saveActCtx, "CheckLushaEnabled").Get(ctx, &lushaEnabled); err != nil {
+		logger.Error("Failed to check Lusha status", "error", err)
+	}
 	tools := agent.ToolDefinitions(lushaEnabled)
 
 	// Find the selected contact's role for prompt context.
@@ -402,10 +425,12 @@ func runAgentLoop(ctx workflow.Context, logger log.Logger, state *models.Workflo
 
 	// Persist to database.
 	workflowID := fmt.Sprintf("outreach-%s", state.Slug)
-	_ = workflow.ExecuteActivity(saveActCtx, "SaveAgentSuggestion", agent.SaveSuggestionRequest{
+	if err := workflow.ExecuteActivity(saveActCtx, "SaveAgentSuggestion", agent.SaveSuggestionRequest{
 		WorkflowID: workflowID,
 		Suggestion: suggestion,
-	}).Get(ctx, nil)
+	}).Get(ctx, nil); err != nil {
+		logger.Error("Failed to save agent suggestion", "error", err)
+	}
 
 	return suggestion
 }

@@ -2,9 +2,14 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"time"
 
 	"github.com/joho/godotenv"
+	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
@@ -66,9 +71,57 @@ func main() {
 	}
 	w.RegisterActivity(agentActs)
 
+	// Signal active workflows about worker restart.
+	go signalActiveWorkflows(c, config.GetTaskQueue())
+
 	log.Printf("Starting worker on task queue: %s", taskQueue)
 	err = w.Run(worker.InterruptCh())
 	if err != nil {
 		log.Fatalf("Worker failed: %v", err)
 	}
+}
+
+// signalActiveWorkflows finds all running workflows and signals each one
+// that the worker process has (re)started.
+func signalActiveWorkflows(c client.Client, taskQueue string) {
+	// Small delay to let the worker register with Temporal.
+	time.Sleep(2 * time.Second)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	query := fmt.Sprintf("TaskQueue = '%s' AND ExecutionStatus = 'Running'", taskQueue)
+	var nextPageToken []byte
+	signaled := 0
+
+	for {
+		resp, err := c.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Query:         query,
+			NextPageToken: nextPageToken,
+		})
+		if err != nil {
+			log.Printf("Failed to list workflows for restart signaling: %v", err)
+			return
+		}
+
+		for _, exec := range resp.GetExecutions() {
+			if exec.GetStatus() != enums.WORKFLOW_EXECUTION_STATUS_RUNNING {
+				continue
+			}
+			wfID := exec.GetExecution().GetWorkflowId()
+			err := c.SignalWorkflow(ctx, wfID, "", config.SignalWorkerRestarted, struct{}{})
+			if err != nil {
+				log.Printf("Failed to signal workflow %s: %v", wfID, err)
+				continue
+			}
+			signaled++
+		}
+
+		nextPageToken = resp.GetNextPageToken()
+		if len(nextPageToken) == 0 {
+			break
+		}
+	}
+
+	log.Printf("Worker restart: signaled %d active workflow(s)", signaled)
 }

@@ -11,7 +11,7 @@ export async function SiteHeader() {
   const isLoggedIn = !!cookieStore.get(COOKIE_NAME)?.value;
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-lg">
+    <header className="gradient-border-b sticky top-0 z-50 w-full bg-background/70 backdrop-blur-xl relative">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
         <Link href="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-80">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">

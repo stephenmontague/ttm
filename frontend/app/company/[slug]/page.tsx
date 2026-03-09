@@ -27,6 +27,9 @@ export default async function CompanyDetailPage({ params }: PageProps) {
   }
 
   const company = companyRes.data;
+  if (!feedRes.ok) {
+    console.error(`Failed to load activity feed for ${slug}`);
+  }
   const feed = feedRes.ok && feedRes.data.feed ? feedRes.data.feed : [];
 
   return (
@@ -60,7 +63,7 @@ export default async function CompanyDetailPage({ params }: PageProps) {
           </div>
 
           {/* Elapsed Timer */}
-          <div className="mt-8 rounded-xl border bg-card p-8">
+          <div className="mt-8">
             <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Time to Meeting
             </p>

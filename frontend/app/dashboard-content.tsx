@@ -30,15 +30,20 @@ export function DashboardContent({ initialCompanies }: DashboardContentProps) {
   return (
     <>
       {/* Hero */}
-      <section className="border-b bg-linear-to-b from-muted/30 to-background">
-        <div className="mx-auto max-w-6xl px-6 py-16">
+      <section className="relative border-b overflow-hidden">
+        <div className="hero-gradient absolute inset-0" />
+        <div className="hero-grid absolute inset-0" />
+        <div className="relative mx-auto max-w-6xl px-6 py-20">
           <div className="max-w-2xl">
-            <h1 className="text-4xl font-bold tracking-tight">
-              Time to Meeting
+            <p className="mb-3 text-sm font-medium tracking-wider uppercase text-primary">
+              Durable Execution in Action
+            </p>
+            <h1 className="text-5xl font-bold tracking-tight">
+              <span className="text-gradient">Time to Meeting</span>
             </h1>
-            <p className="mt-3 text-lg text-muted-foreground">
+            <p className="mt-4 text-lg leading-relaxed text-muted-foreground">
               Tracking outreach cadence to target companies with{" "}
-              <span className="font-medium text-foreground">
+              <span className="font-semibold text-foreground">
                 Temporal durable workflows
               </span>
               . Each company gets a long-running workflow that persists
@@ -72,20 +77,13 @@ export function DashboardContent({ initialCompanies }: DashboardContentProps) {
         ) : active.length === 0 ? (
           <div className="rounded-xl border border-dashed p-12 text-center">
             <p className="text-sm text-muted-foreground">
-              No active workflows yet. Start one from the{" "}
-              <a
-                href="/admin"
-                className="font-medium underline underline-offset-4 hover:text-foreground"
-              >
-                admin panel
-              </a>
-              .
+              No active workflows right now. Check back soon.
             </p>
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {active.map((company) => (
-              <WorkflowCard key={company.ID} company={company} />
+            {active.map((company, index) => (
+              <WorkflowCard key={company.ID} company={company} index={index} />
             ))}
           </div>
         )}
@@ -95,17 +93,17 @@ export function DashboardContent({ initialCompanies }: DashboardContentProps) {
       {won.length > 0 && (
         <section className="mx-auto max-w-6xl px-6 pb-12">
           <div className="flex items-center gap-2 mb-6">
-            <Trophy className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            <Trophy className="h-5 w-5 text-primary" />
             <h2 className="text-xl font-semibold tracking-tight">
               Wall of Wins
             </h2>
-            <span className="ml-2 rounded-full bg-blue-500/10 px-2.5 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-400">
+            <span className="ml-2 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
               {won.length}
             </span>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {won.map((company) => (
-              <WorkflowCard key={company.ID} company={company} />
+            {won.map((company, index) => (
+              <WorkflowCard key={company.ID} company={company} index={index} />
             ))}
           </div>
         </section>

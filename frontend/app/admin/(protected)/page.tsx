@@ -7,18 +7,18 @@ import { CreateWorkflowForm } from "@/components/create-workflow-form";
 import { StatusBadge } from "@/components/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Activity, Trophy, ChevronRight } from "lucide-react";
+import { Activity, Trophy, ChevronRight, AlertCircle } from "lucide-react";
 import type { Company } from "@/lib/types";
 
 async function fetchCompanies(): Promise<Company[]> {
   const res = await fetch("/api/admin/companies");
-  if (!res.ok) return [];
+  if (!res.ok) throw new Error(`Failed to load companies (${res.status})`);
   const data = await res.json();
   return data.companies || [];
 }
 
 export default function AdminPage() {
-  const { data: companies, loading, refresh } = usePolling<Company[]>({
+  const { data: companies, loading, error, refresh } = usePolling<Company[]>({
     fetcher: fetchCompanies,
     interval: 10000,
   });
@@ -37,6 +37,14 @@ export default function AdminPage() {
       <p className="mt-1 text-muted-foreground">
         Manage outreach workflows and send signals
       </p>
+
+      {/* Error banner */}
+      {error && (
+        <div className="mt-6 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {error}. Retrying...
+        </div>
+      )}
 
       {/* Stats */}
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">

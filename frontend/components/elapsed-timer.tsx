@@ -36,21 +36,34 @@ export function ElapsedTimer({ startedAt, size = "sm", className }: ElapsedTimer
 
   if (size === "lg") {
     return (
-      <div className={cn("flex items-baseline gap-3 font-mono tabular-nums", className)}>
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-5xl font-bold tracking-tight">{elapsed.days}</span>
-          <span className="text-lg text-muted-foreground">days</span>
+      <div className={cn("timer-glow rounded-xl border bg-card/80 p-6", className)}>
+        <div className="flex items-end justify-center gap-1 font-mono tabular-nums">
+          <div className="flex flex-col items-center">
+            <span className="text-6xl font-bold tracking-tight text-gradient">{elapsed.days}</span>
+            <span className="mt-1 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Days</span>
+          </div>
+          <span className="timer-colon text-3xl font-light text-primary/40 mb-3">:</span>
+          <div className="flex flex-col items-center">
+            <span className="text-4xl font-semibold tracking-tight text-primary">{pad(elapsed.hours)}</span>
+            <span className="mt-1 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Hrs</span>
+          </div>
+          <span className="timer-colon text-3xl font-light text-primary/40 mb-3">:</span>
+          <div className="flex flex-col items-center">
+            <span className="text-4xl font-semibold tracking-tight text-primary">{pad(elapsed.minutes)}</span>
+            <span className="mt-1 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Min</span>
+          </div>
+          <span className="timer-colon text-3xl font-light text-primary/40 mb-3">:</span>
+          <div className="flex flex-col items-center">
+            <span className="text-4xl font-semibold tracking-tight text-primary">{pad(elapsed.seconds)}</span>
+            <span className="mt-1 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Sec</span>
+          </div>
         </div>
-        <span className="text-3xl font-light text-muted-foreground/60">:</span>
-        <span className="text-3xl font-medium tracking-tight">
-          {pad(elapsed.hours)}:{pad(elapsed.minutes)}:{pad(elapsed.seconds)}
-        </span>
       </div>
     );
   }
 
   return (
-    <span className={cn("font-mono text-sm tabular-nums tracking-tight", className)}>
+    <span className={cn("font-mono text-sm tabular-nums tracking-tight text-primary", className)}>
       {elapsed.days}d {pad(elapsed.hours)}:{pad(elapsed.minutes)}:{pad(elapsed.seconds)}
     </span>
   );
