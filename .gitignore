@@ -10,6 +10,8 @@ certs/
 
 # Go
 server/tmp/
+server/api
+server/worker
 
 # Node / Next.js
 frontend/node_modules/

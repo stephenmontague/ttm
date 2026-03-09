@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -63,6 +64,24 @@ func GetSessionCookieName() string {
 		return n
 	}
 	return DefaultSessionCookieName
+}
+
+func GetEnvironment() string {
+	if e := os.Getenv("ENVIRONMENT"); e != "" {
+		return e
+	}
+	return "development"
+}
+
+func IsProduction() bool {
+	return GetEnvironment() == "production"
+}
+
+func GetCORSOrigins() []string {
+	if origins := os.Getenv("CORS_ORIGINS"); origins != "" {
+		return strings.Split(origins, ",")
+	}
+	return []string{"http://localhost:4000"}
 }
 
 // AI Agent config

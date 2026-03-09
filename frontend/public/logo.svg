@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <defs>
+    <!-- Dark background -->
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#0d1f2d"/>
+      <stop offset="100%" stop-color="#060e14"/>
+    </radialGradient>
+
+    <!-- Cyan glow gradient for the clock face -->
+    <radialGradient id="clockFace" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#001a2e"/>
+      <stop offset="100%" stop-color="#000d1a"/>
+    </radialGradient>
+
+    <!-- Glow filter -->
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Subtle outer glow -->
+    <filter id="outerGlow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Node glow -->
+    <filter id="nodeGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <clipPath id="circleClip">
+      <circle cx="50" cy="50" r="38"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background pill/square rounded -->
+  <rect width="100" height="100" rx="22" fill="url(#bgGrad)"/>
+
+  <!-- Outer ring glow -->
+  <circle cx="50" cy="50" r="38" fill="none" stroke="#00e5ff" stroke-width="0.4" opacity="0.25" filter="url(#outerGlow)"/>
+
+  <!-- Clock outer ring -->
+  <circle cx="50" cy="50" r="36" fill="url(#clockFace)" stroke="#00cfee" stroke-width="1.4" filter="url(#glow)"/>
+
+  <!-- Tick marks (12 short ticks around the face) -->
+  <g stroke="#00cfee" stroke-width="1" opacity="0.4">
+    <!-- 12 o'clock -->
+    <line x1="50" y1="16.5" x2="50" y2="20"/>
+    <!-- 1 -->
+    <line x1="67.3" y1="21.2" x2="65.5" y2="24.1" transform="rotate(30 50 50)"/>
+    <!-- 2 -->
+    <line x1="67.3" y1="21.2" x2="65.5" y2="24.1" transform="rotate(60 50 50)"/>
+    <!-- 3 o'clock -->
+    <line x1="79.5" y1="50" x2="76" y2="50"/>
+    <!-- 4 -->
+    <line x1="67.3" y1="21.2" x2="65.5" y2="24.1" transform="rotate(120 50 50)"/>
+    <!-- 5 -->
+    <line x1="67.3" y1="21.2" x2="65.5" y2="24.1" transform="rotate(150 50 50)"/>
+    <!-- 6 o'clock -->
+    <line x1="50" y1="83.5" x2="50" y2="80"/>
+    <!-- 7 -->
+    <line x1="67.3" y1="21.2" x2="65.5" y2="24.1" transform="rotate(210 50 50)"/>
+    <!-- 8 -->
+    <line x1="67.3" y1="21.2" x2="65.5" y2="24.1" transform="rotate(240 50 50)"/>
+    <!-- 9 o'clock -->
+    <line x1="20.5" y1="50" x2="24" y2="50"/>
+    <!-- 10 -->
+    <line x1="67.3" y1="21.2" x2="65.5" y2="24.1" transform="rotate(300 50 50)"/>
+    <!-- 11 -->
+    <line x1="67.3" y1="21.2" x2="65.5" y2="24.1" transform="rotate(330 50 50)"/>
+  </g>
+
+  <!-- Hour markers (larger ticks at 12/3/6/9 already covered, style them bigger) -->
+  <g stroke="#00e5ff" stroke-width="1.8" opacity="0.7" filter="url(#glow)">
+    <line x1="50" y1="16.5" x2="50" y2="21.5"/>
+    <line x1="79.5" y1="50" x2="74.5" y2="50"/>
+    <line x1="50" y1="83.5" x2="50" y2="78.5"/>
+    <line x1="20.5" y1="50" x2="25.5" y2="50"/>
+  </g>
+
+  <!-- Workflow path under the clock hands (dashed arc suggesting a pipeline/DAG path) -->
+  <!-- Arc from ~8 o'clock position curving to ~4 o'clock, clipped inside clock -->
+  <g clip-path="url(#circleClip)">
+    <path d="M 28 65 Q 50 82 72 65" fill="none" stroke="#00e5ff" stroke-width="1" stroke-dasharray="3 3" opacity="0.35"/>
+  </g>
+
+  <!-- Workflow nodes on that arc -->
+  <circle cx="28" cy="65" r="3" fill="#001a2e" stroke="#00e5ff" stroke-width="1.2" filter="url(#nodeGlow)" opacity="0.7"/>
+  <circle cx="50" cy="74" r="3" fill="#001a2e" stroke="#00e5ff" stroke-width="1.2" filter="url(#nodeGlow)" opacity="0.7"/>
+  <circle cx="72" cy="65" r="3" fill="#001a2e" stroke="#00e5ff" stroke-width="1.2" filter="url(#nodeGlow)" opacity="0.7"/>
+
+  <!-- Inner node dots (filled, active state) -->
+  <circle cx="28" cy="65" r="1.2" fill="#00e5ff" opacity="0.9"/>
+  <circle cx="50" cy="74" r="1.2" fill="#00e5ff" opacity="0.6"/>
+  <circle cx="72" cy="65" r="1.2" fill="#00e5ff" opacity="0.9"/>
+
+  <!-- Center pivot -->
+  <circle cx="50" cy="50" r="2.5" fill="#00e5ff" filter="url(#glow)"/>
+
+  <!-- Minute hand (pointing ~to 12, slightly right at 11:55 feel) -->
+  <line x1="50" y1="50" x2="50" y2="24" stroke="#00e5ff" stroke-width="2.2" stroke-linecap="round" filter="url(#glow)"/>
+
+  <!-- Hour hand (pointing ~to 3-ish, roughly 10:10 style) -->
+  <line x1="50" y1="50" x2="64" y2="42" stroke="#00cfee" stroke-width="2.8" stroke-linecap="round" filter="url(#glow)" opacity="0.9"/>
+
+  <!-- Sweep second hand — accent line in brighter cyan, thin -->
+  <line x1="50" y1="50" x2="36" y2="29" stroke="#7fffff" stroke-width="1" stroke-linecap="round" filter="url(#glow)" opacity="0.7"/>
+  <!-- Counterweight -->
+  <line x1="50" y1="50" x2="55" y2="60" stroke="#7fffff" stroke-width="1" stroke-linecap="round" opacity="0.5"/>
+
+  <!-- Center cap over hands -->
+  <circle cx="50" cy="50" r="2" fill="#00e5ff" filter="url(#glow)"/>
+
+  <!-- Top crown / stem of stopwatch -->
+  <rect x="46" y="9" width="8" height="4" rx="2" fill="none" stroke="#00cfee" stroke-width="1.4" filter="url(#glow)"/>
+  <!-- Button on top -->
+  <circle cx="50" cy="9" r="1.5" fill="#00e5ff" filter="url(#glow)"/>
+</svg>

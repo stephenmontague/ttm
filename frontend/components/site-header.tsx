@@ -1,8 +1,8 @@
+import Image from "next/image";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LogoutButton } from "@/components/logout-button";
-import { Activity } from "lucide-react";
 
 const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || "ttm_session";
 
@@ -14,9 +14,13 @@ export async function SiteHeader() {
     <header className="gradient-border-b sticky top-0 z-50 w-full bg-background/70 backdrop-blur-xl relative">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
         <Link href="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-80">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-            <Activity className="h-4 w-4 text-primary-foreground" />
-          </div>
+          <Image
+            src="/logo.svg"
+            alt="TTM Tracker logo"
+            width={32}
+            height={32}
+            className="rounded-lg"
+          />
           <div className="flex flex-col">
             <span className="text-sm font-semibold leading-none tracking-tight">
               TTM Tracker

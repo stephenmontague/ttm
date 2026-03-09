@@ -50,7 +50,7 @@ func (h *Handler) PostLogin(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   maxAge,
 		HttpOnly: true,
-		Secure:   false, // set to true in production (HTTPS)
+		Secure:   config.IsProduction(),
 		SameSite: http.SameSiteLaxMode,
 	})
 
@@ -70,7 +70,7 @@ func (h *Handler) PostLogout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   config.IsProduction(),
 		SameSite: http.SameSiteLaxMode,
 	})
 

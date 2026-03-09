@@ -20,6 +20,24 @@ export const metadata: Metadata = {
   title: "TTM Tracker — Time to Meeting",
   description:
     "A Temporal-powered outreach tracker that measures how long it takes to book a meeting with target companies. Durable workflows, human-in-the-loop signals, and AI-assisted prospecting.",
+  openGraph: {
+    title: "TTM Tracker — Time to Meeting",
+    description:
+      "See how long it takes to book a meeting with target companies, powered by Temporal durable workflows and AI-assisted prospecting.",
+    type: "website",
+    siteName: "TTM Tracker",
+    images: [{ url: "/og-image.png", width: 1200, height: 630 }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "TTM Tracker — Time to Meeting",
+    description:
+      "See how long it takes to book a meeting with target companies, powered by Temporal durable workflows and AI-assisted prospecting.",
+    images: ["/og-image.png"],
+  },
+  icons: {
+    apple: "/apple-icon.png",
+  },
 };
 
 export default function RootLayout({
