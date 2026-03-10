@@ -81,6 +81,7 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RequestID)
+	r.Use(api.SecurityHeaders)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   config.GetCORSOrigins(),
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
@@ -98,6 +99,8 @@ func main() {
 	r.Route("/api", func(r chi.Router) {
 		// Rate limit all API routes: 100 requests per minute per IP
 		r.Use(httprate.LimitByIP(100, 1*time.Minute))
+		// Limit request body size to 1MB
+		r.Use(api.MaxBodySize(1 << 20))
 
 		// Public endpoints
 		r.Get("/companies", handler.ListCompanies)

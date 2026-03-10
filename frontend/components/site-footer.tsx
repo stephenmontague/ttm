@@ -17,9 +17,6 @@ export function SiteFooter() {
             {" "}durable execution
           </p>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Built with Next.js + Go
-        </p>
       </div>
     </footer>
   );

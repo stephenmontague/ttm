@@ -113,7 +113,8 @@ func (h *Handler) reconcileStatuses(ctx context.Context, companies []repository.
 func (h *Handler) ListCompanies(w http.ResponseWriter, r *http.Request) {
 	companies, err := h.companyRepo.ListCompanies(r.Context())
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to list companies: "+err.Error())
+		log.Printf("Failed to list companies: %v", err)
+		respondError(w, http.StatusInternalServerError, "Failed to list companies")
 		return
 	}
 
@@ -147,6 +148,17 @@ func (h *Handler) GetCompany(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, obfuscateCompany(*company))
 }
 
+// publicFeedEntry is the public-safe representation of an activity feed entry.
+// WorkflowID is omitted to prevent leaking real company names.
+type publicFeedEntry struct {
+	ID          int        `json:"ID"`
+	Timestamp   time.Time  `json:"Timestamp"`
+	EventType   string     `json:"EventType"`
+	Description string     `json:"Description"`
+	Channel     *string    `json:"Channel"`
+	CreatedAt   time.Time  `json:"CreatedAt"`
+}
+
 // GetCompanyFeed returns the sanitized activity feed for a company.
 func (h *Handler) GetCompanyFeed(w http.ResponseWriter, r *http.Request) {
 	publicID := chi.URLParam(r, "slug")
@@ -159,17 +171,26 @@ func (h *Handler) GetCompanyFeed(w http.ResponseWriter, r *http.Request) {
 
 	feed, err := h.companyRepo.GetActivityFeed(r.Context(), company.ID)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to get activity feed: "+err.Error())
+		log.Printf("Failed to get activity feed for %s: %v", company.ID, err)
+		respondError(w, http.StatusInternalServerError, "Failed to get activity feed")
 		return
 	}
 
-	if feed == nil {
-		feed = []repository.ActivityFeedRow{}
+	publicFeed := make([]publicFeedEntry, len(feed))
+	for i, f := range feed {
+		publicFeed[i] = publicFeedEntry{
+			ID:          f.ID,
+			Timestamp:   f.Timestamp,
+			EventType:   f.EventType,
+			Description: f.Description,
+			Channel:     f.Channel,
+			CreatedAt:   f.CreatedAt,
+		}
 	}
 
 	respondJSON(w, http.StatusOK, map[string]any{
-		"feed":  feed,
-		"total": len(feed),
+		"feed":  publicFeed,
+		"total": len(publicFeed),
 	})
 }
 
@@ -179,7 +200,8 @@ func (h *Handler) GetCompanyFeed(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListAdminCompanies(w http.ResponseWriter, r *http.Request) {
 	companies, err := h.companyRepo.ListCompanies(r.Context())
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to list companies: "+err.Error())
+		log.Printf("Failed to list admin companies: %v", err)
+		respondError(w, http.StatusInternalServerError, "Failed to list companies")
 		return
 	}
 
@@ -227,7 +249,8 @@ func (h *Handler) CreateCompany(w http.ResponseWriter, r *http.Request) {
 
 	we, err := h.temporalClient.ExecuteWorkflow(r.Context(), options, config.WorkflowName, params)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to start workflow: "+err.Error())
+		log.Printf("Failed to start workflow: %v", err)
+		respondError(w, http.StatusInternalServerError, "Failed to start workflow")
 		return
 	}
 
@@ -265,13 +288,15 @@ func (h *Handler) GetAdminCompany(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusNotFound, "Workflow not found in Temporal")
 			return
 		}
-		respondError(w, http.StatusBadGateway, "Failed to query workflow: "+err.Error())
+		log.Printf("Failed to query workflow %s: %v", workflowID, err)
+		respondError(w, http.StatusBadGateway, "Failed to query workflow")
 		return
 	}
 
 	var state models.WorkflowState
 	if err := resp.Get(&state); err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to decode workflow state: "+err.Error())
+		log.Printf("Failed to decode workflow state for %s: %v", workflowID, err)
+		respondError(w, http.StatusInternalServerError, "Failed to decode workflow state")
 		return
 	}
 
@@ -294,7 +319,8 @@ func (h *Handler) ReconcileCompanyStatus(w http.ResponseWriter, r *http.Request)
 			_ = h.companyRepo.UpdateStatus(r.Context(), workflowID, "terminated")
 			respondJSON(w, http.StatusOK, map[string]any{"status": "terminated"})
 		} else {
-			respondError(w, http.StatusBadGateway, "Failed to reach Temporal: "+err.Error())
+			log.Printf("Failed to reach Temporal for %s: %v", workflowID, err)
+			respondError(w, http.StatusBadGateway, "Failed to reach Temporal")
 		}
 		return
 	}
@@ -336,7 +362,8 @@ func (h *Handler) SignalOutreach(w http.ResponseWriter, r *http.Request) {
 
 	err := h.temporalClient.SignalWorkflow(r.Context(), workflowID, "", config.SignalLogOutreach, signal)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to send signal: "+err.Error())
+		log.Printf("Failed to send signal to %s: %v", workflowID, err)
+		respondError(w, http.StatusInternalServerError, "Failed to send signal")
 		return
 	}
 
@@ -368,7 +395,8 @@ func (h *Handler) SignalAddContact(w http.ResponseWriter, r *http.Request) {
 
 	err := h.temporalClient.SignalWorkflow(r.Context(), workflowID, "", config.SignalAddContact, signal)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to send signal: "+err.Error())
+		log.Printf("Failed to send signal to %s: %v", workflowID, err)
+		respondError(w, http.StatusInternalServerError, "Failed to send signal")
 		return
 	}
 
@@ -396,7 +424,8 @@ func (h *Handler) SignalRemoveContact(w http.ResponseWriter, r *http.Request) {
 
 	err := h.temporalClient.SignalWorkflow(r.Context(), workflowID, "", config.SignalRemoveContact, signal)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to send signal: "+err.Error())
+		log.Printf("Failed to send signal to %s: %v", workflowID, err)
+		respondError(w, http.StatusInternalServerError, "Failed to send signal")
 		return
 	}
 
@@ -428,7 +457,8 @@ func (h *Handler) SignalRequestAgent(w http.ResponseWriter, r *http.Request) {
 
 	err := h.temporalClient.SignalWorkflow(r.Context(), workflowID, "", config.SignalRequestAgent, signal)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to send signal: "+err.Error())
+		log.Printf("Failed to send signal to %s: %v", workflowID, err)
+		respondError(w, http.StatusInternalServerError, "Failed to send signal")
 		return
 	}
 
@@ -458,7 +488,8 @@ func (h *Handler) SignalMeetingBooked(w http.ResponseWriter, r *http.Request) {
 
 	err := h.temporalClient.SignalWorkflow(r.Context(), workflowID, "", config.SignalMeetingBooked, signal)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to send signal: "+err.Error())
+		log.Printf("Failed to send signal to %s: %v", workflowID, err)
+		respondError(w, http.StatusInternalServerError, "Failed to send signal")
 		return
 	}
 
