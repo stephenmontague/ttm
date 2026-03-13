@@ -4,10 +4,13 @@ import "time"
 
 // WorkflowParams is the input when starting a new outreach workflow.
 type WorkflowParams struct {
-	CompanyName string
-	Slug        string
-	StartedAt   time.Time // Preserved across continue-as-new; zero on first run.
-	Contacts    []Contact // Preserved across continue-as-new.
+	CompanyName      string
+	Slug             string
+	StartedAt        time.Time          // Preserved across continue-as-new; zero on first run.
+	Contacts         []Contact          // Preserved across continue-as-new.
+	OutreachAttempts []OutreachAttempt   // Preserved across continue-as-new.
+	AgentSuggestions []AgentSuggestion   // Preserved across continue-as-new.
+	WorkerRestartCount int              // Preserved across continue-as-new.
 }
 
 // NewWorkflowState creates an initial workflow state from params.
@@ -16,14 +19,23 @@ func NewWorkflowState(params WorkflowParams, startedAt time.Time) *WorkflowState
 	if contacts == nil {
 		contacts = []Contact{}
 	}
+	outreachAttempts := params.OutreachAttempts
+	if outreachAttempts == nil {
+		outreachAttempts = []OutreachAttempt{}
+	}
+	agentSuggestions := params.AgentSuggestions
+	if agentSuggestions == nil {
+		agentSuggestions = []AgentSuggestion{}
+	}
 	return &WorkflowState{
-		CompanyName:      params.CompanyName,
-		Slug:             params.Slug,
-		StartedAt:        startedAt,
-		Status:           "active",
-		Contacts:         contacts,
-		OutreachAttempts: []OutreachAttempt{},
-		AgentSuggestions: []AgentSuggestion{},
+		CompanyName:        params.CompanyName,
+		Slug:               params.Slug,
+		StartedAt:          startedAt,
+		Status:             "active",
+		Contacts:           contacts,
+		OutreachAttempts:   outreachAttempts,
+		AgentSuggestions:   agentSuggestions,
+		WorkerRestartCount: params.WorkerRestartCount,
 	}
 }
 
@@ -37,6 +49,7 @@ type WorkflowState struct {
 	Contacts            []Contact
 	OutreachAttempts    []OutreachAttempt
 	AgentSuggestions    []AgentSuggestion
+	PublicID             string `json:"PublicID,omitempty"`
 	AgentTaskInProgress bool
 	WorkerRestartCount  int
 	LastSnapshotAt      time.Time

@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, RefreshCw, Users, Mail, Bot, X } from "lucide-react";
+import { ArrowLeft, RefreshCw, Users, Mail, Bot, X, ExternalLink } from "lucide-react";
 import type { WorkflowState, Contact } from "@/lib/types";
 
 export default function AdminCompanyDetailPage() {
@@ -25,12 +25,11 @@ export default function AdminCompanyDetailPage() {
     return res.json();
   }, [slug]);
 
-  const { data: state, loading, refresh } = usePolling<WorkflowState>({
+  const { data: state, loading, refresh, pollUntilChanged } = usePolling<WorkflowState>({
     fetcher,
-    interval: 10000,
   });
 
-  const { send } = useSignal({ slug, onSuccess: refresh });
+  const { send } = useSignal({ slug, onSuccess: () => pollUntilChanged() });
 
   const [refreshing, setRefreshing] = useState(false);
   const handleRefresh = useCallback(async () => {
@@ -112,6 +111,13 @@ export default function AdminCompanyDetailPage() {
               <Bot className="h-4 w-4" />
             </Button>
           </Link>
+          {state.PublicID && (
+            <Link href={`/company/${state.PublicID}`} target="_blank">
+              <Button variant="outline" size="icon" className="h-9 w-9">
+                <ExternalLink className="h-4 w-4" />
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -301,7 +307,7 @@ export default function AdminCompanyDetailPage() {
 
         {/* Right column — Signal Panel */}
         <div>
-          <SignalPanel slug={slug} status={state.Status} contacts={activeContacts} onSuccess={refresh} />
+          <SignalPanel slug={slug} status={state.Status} contacts={activeContacts} onSuccess={() => pollUntilChanged()} />
         </div>
       </div>
     </div>

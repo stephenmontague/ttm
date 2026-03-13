@@ -217,14 +217,14 @@ export default function AgentPage() {
                   !isActive ? "opacity-50 pointer-events-none space-y-4" : "space-y-4"
                 }
               >
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
+                <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4">
+                  <div className="space-y-1.5 min-w-0">
                     <Label className="text-xs">Contact (optional)</Label>
                     <Select
                       value={selectedContact}
                       onValueChange={setSelectedContact}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="truncate">
                         <SelectValue placeholder="Any / General" />
                       </SelectTrigger>
                       <SelectContent>
@@ -237,7 +237,7 @@ export default function AgentPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 w-48 shrink-0">
                     <Label className="text-xs">Task</Label>
                     <Select value={taskType} onValueChange={setTaskType}>
                       <SelectTrigger>

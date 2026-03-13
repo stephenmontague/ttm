@@ -254,10 +254,13 @@ func Workflow(ctx workflow.Context, params models.WorkflowParams) (*models.Workf
 			timerCancel()
 			logger.Info("Continuing as new", "events", eventCount)
 			return nil, workflow.NewContinueAsNewError(ctx, Workflow, models.WorkflowParams{
-				CompanyName: state.CompanyName,
-				Slug:        state.Slug,
-				StartedAt:   state.StartedAt,
-				Contacts:    state.Contacts,
+				CompanyName:        state.CompanyName,
+				Slug:               state.Slug,
+				StartedAt:          state.StartedAt,
+				Contacts:           state.Contacts,
+				OutreachAttempts:   state.OutreachAttempts,
+				AgentSuggestions:   state.AgentSuggestions,
+				WorkerRestartCount: state.WorkerRestartCount,
 			})
 		}
 	}

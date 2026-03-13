@@ -27,9 +27,7 @@ export function useSignal({ slug, onSuccess }: UseSignalOptions) {
         }
 
         toast.success(`Signal sent: ${action}`);
-        if (onSuccess) {
-          setTimeout(onSuccess, 500);
-        }
+        if (onSuccess) onSuccess();
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Failed to send signal");
       } finally {

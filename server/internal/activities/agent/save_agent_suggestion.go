@@ -17,9 +17,11 @@ func (a *AgentActivities) SaveAgentSuggestion(ctx context.Context, req agentpkg.
 	err := a.CompanyRepo.InsertAgentSuggestion(ctx,
 		req.WorkflowID,
 		req.Suggestion.TaskType,
+		req.Suggestion.ContactName,
 		req.Suggestion.Request,
 		req.Suggestion.Response,
 		req.Suggestion.DraftMessage,
+		req.Suggestion.Timestamp,
 	)
 	if err != nil {
 		return fmt.Errorf("save agent suggestion: %w", err)

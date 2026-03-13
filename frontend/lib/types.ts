@@ -34,6 +34,7 @@ export interface Contact {
 export interface WorkflowState {
   CompanyName: string;
   Slug: string;
+  PublicID?: string;
   StartedAt: string;
   Status: string;
   CurrentContact: Contact | null;

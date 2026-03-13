@@ -272,12 +272,25 @@ func (h *Handler) CreateCompany(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GetAdminCompany returns full workflow state via Temporal query (including PII).
-// Falls back to a 404 if the workflow no longer exists in Temporal.
+// GetAdminCompany returns full workflow state from the DB cache.
+// Falls back to a Temporal query if the company is not yet in the DB.
 func (h *Handler) GetAdminCompany(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	workflowID := "outreach-" + slug
 
+	// Try DB first.
+	company, err := h.companyRepo.GetCompanyBySlug(r.Context(), slug)
+	if err == nil {
+		contacts, _ := h.companyRepo.GetContacts(r.Context(), workflowID)
+		attempts, _ := h.companyRepo.GetOutreachAttempts(r.Context(), workflowID)
+		suggestions, _ := h.companyRepo.GetAgentSuggestions(r.Context(), workflowID)
+		state := assembleWorkflowState(company, contacts, attempts, suggestions)
+		respondJSON(w, http.StatusOK, state)
+		return
+	}
+
+	// Fallback: query Temporal directly.
+	log.Printf("Company %s not in DB, falling back to Temporal query", slug)
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
@@ -285,7 +298,7 @@ func (h *Handler) GetAdminCompany(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var notFound *serviceerror.NotFound
 		if errors.As(err, &notFound) {
-			respondError(w, http.StatusNotFound, "Workflow not found in Temporal")
+			respondError(w, http.StatusNotFound, "Workflow not found")
 			return
 		}
 		log.Printf("Failed to query workflow %s: %v", workflowID, err)
@@ -301,6 +314,59 @@ func (h *Handler) GetAdminCompany(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, state)
+}
+
+// assembleWorkflowState builds a WorkflowState from DB rows.
+func assembleWorkflowState(company *repository.CompanyRow, contacts []repository.ContactRow, attempts []repository.OutreachAttemptRow, suggestions []repository.AgentSuggestionRow) models.WorkflowState {
+	state := models.WorkflowState{
+		CompanyName:         company.CompanyName,
+		Slug:                company.Slug,
+		PublicID:            company.PublicID,
+		StartedAt:           company.StartedAt,
+		Status:              company.Status,
+		WorkerRestartCount:  company.RestartCount,
+		AgentTaskInProgress: company.AgentTaskInProgress,
+		MeetingBookedAt:     company.MeetingBookedAt,
+		MeetingNotes:        company.MeetingNotes,
+	}
+	if company.LastSnapshotAt != nil {
+		state.LastSnapshotAt = *company.LastSnapshotAt
+	}
+
+	state.Contacts = make([]models.Contact, len(contacts))
+	for i, c := range contacts {
+		state.Contacts[i] = models.Contact{
+			Name:     c.Name,
+			Role:     c.Role,
+			LinkedIn: c.LinkedIn,
+			Active:   c.Active,
+			AddedAt:  c.AddedAt,
+		}
+	}
+
+	state.OutreachAttempts = make([]models.OutreachAttempt, len(attempts))
+	for i, a := range attempts {
+		state.OutreachAttempts[i] = models.OutreachAttempt{
+			Timestamp: a.Timestamp,
+			Channel:   a.Channel,
+			Notes:     a.Notes,
+			Contact:   a.Contact,
+		}
+	}
+
+	state.AgentSuggestions = make([]models.AgentSuggestion, len(suggestions))
+	for i, s := range suggestions {
+		state.AgentSuggestions[i] = models.AgentSuggestion{
+			Timestamp:    s.Timestamp,
+			TaskType:     s.TaskType,
+			ContactName:  s.ContactName,
+			Request:      s.Request,
+			Response:     s.Response,
+			DraftMessage: s.DraftMessage,
+		}
+	}
+
+	return state
 }
 
 // ReconcileCompanyStatus checks the real Temporal status for a workflow

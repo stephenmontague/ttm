@@ -47,18 +47,45 @@ func (a *Activities) PersistWorkflowState(ctx context.Context, req models.Persis
 	workflowID := fmt.Sprintf("outreach-%s", state.Slug)
 
 	row := &repository.CompanyRow{
-		ID:                 workflowID,
-		CompanyName:        state.CompanyName,
-		Slug:               state.Slug,
-		StartedAt:          state.StartedAt,
-		Status:             state.Status,
-		ElapsedDays:        elapsedDays,
-		OutreachCount:      len(state.OutreachAttempts),
-		ContactCount:       activeContactCount,
-		RestartCount:       state.WorkerRestartCount,
-		CurrentContactRole: contactRole,
-		MeetingBookedAt:    state.MeetingBookedAt,
-		LastSnapshotAt:     &now,
+		ID:                  workflowID,
+		CompanyName:         state.CompanyName,
+		Slug:                state.Slug,
+		StartedAt:           state.StartedAt,
+		Status:              state.Status,
+		ElapsedDays:         elapsedDays,
+		OutreachCount:       len(state.OutreachAttempts),
+		ContactCount:        activeContactCount,
+		RestartCount:        state.WorkerRestartCount,
+		CurrentContactRole:  contactRole,
+		MeetingBookedAt:     state.MeetingBookedAt,
+		LastSnapshotAt:      &now,
+		AgentTaskInProgress: state.AgentTaskInProgress,
+		MeetingNotes:        state.MeetingNotes,
+	}
+
+	// Build contact rows from workflow state.
+	contactRows := make([]repository.ContactRow, len(state.Contacts))
+	for i, c := range state.Contacts {
+		contactRows[i] = repository.ContactRow{
+			WorkflowID: workflowID,
+			Name:       c.Name,
+			Role:       c.Role,
+			LinkedIn:   c.LinkedIn,
+			Active:     c.Active,
+			AddedAt:    c.AddedAt,
+		}
+	}
+
+	// Build outreach attempt rows from workflow state.
+	attemptRows := make([]repository.OutreachAttemptRow, len(state.OutreachAttempts))
+	for i, a := range state.OutreachAttempts {
+		attemptRows[i] = repository.OutreachAttemptRow{
+			WorkflowID: workflowID,
+			Timestamp:  a.Timestamp,
+			Channel:    a.Channel,
+			Notes:      a.Notes,
+			Contact:    a.Contact,
+		}
 	}
 
 	var feedRow *repository.ActivityFeedRow
@@ -74,7 +101,7 @@ func (a *Activities) PersistWorkflowState(ctx context.Context, req models.Persis
 		}
 	}
 
-	if err := a.CompanyRepo.PersistStateAndEvent(ctx, row, feedRow); err != nil {
+	if err := a.CompanyRepo.PersistFullState(ctx, row, contactRows, attemptRows, feedRow); err != nil {
 		return fmt.Errorf("persist workflow state: %w", err)
 	}
 
